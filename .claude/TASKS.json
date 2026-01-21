@@ -1,0 +1,145 @@
+{
+    "ProjectName": "ECMWF Downloader",
+    "Stage": "项目初始化",
+    "Tasks": [
+        {
+            "ID": "1",
+            "TaskName": "项目结构初始化",
+            "Status": "completed",
+            "Description": "初始化Git仓库，创建项目基础目录结构",
+            "File": [
+                "/home/pc/project/ECMWF downloader/",
+                ".git/",
+                ".claude/"
+            ],
+            "Deliverables": [
+                ".git/",
+                ".claude/",
+                ".claude/rules/"
+            ],
+            "Acceptance Criteria": "Git仓库初始化成功，.claude目录结构创建完成"
+        },
+        {
+            "ID": "2",
+            "TaskName": "项目记忆组件创建",
+            "Status": "completed",
+            "Description": "创建CLAUDE.md、README.md、CHANGELOG.md、LAST_CLAUDE_PROGRESS.md和TASKS.json",
+            "File": [
+                ".claude/CLAUDE.md",
+                "README.md",
+                "CHANGELOG.md",
+                ".claude/LAST_CLAUDE_PROGRESS.md",
+                ".claude/TASKS.json"
+            ],
+            "Deliverables": [
+                ".claude/CLAUDE.md",
+                "README.md",
+                "CHANGELOG.md",
+                ".claude/LAST_CLAUDE_PROGRESS.md",
+                ".claude/TASKS.json"
+            ],
+            "Acceptance Criteria": "所有项目记忆组件文件创建完成，内容格式符合规范"
+        },
+        {
+            "ID": "3",
+            "TaskName": "Git配置",
+            "Status": "pending",
+            "Description": "创建.gitignore文件，配置Python项目的忽略规则",
+            "File": [
+                ".gitignore"
+            ],
+            "Deliverables": [
+                ".gitignore"
+            ],
+            "Acceptance Criteria": ".gitignore配置完成，包含Python标准忽略规则"
+        },
+        {
+            "ID": "4",
+            "TaskName": "开发环境配置",
+            "Status": "pending",
+            "Description": "配置Python虚拟环境，创建requirements.txt，安装基础依赖",
+            "File": [
+                "requirements.txt",
+                ".venv/"
+            ],
+            "Deliverables": [
+                "requirements.txt",
+                ".venv/"
+            ],
+            "Acceptance Criteria": "虚拟环境创建成功，依赖安装完成"
+        },
+        {
+            "ID": "5",
+            "TaskName": "CDS API认证配置",
+            "Status": "pending",
+            "Description": "配置ECMWF CDS API认证信息，创建配置文件模板",
+            "File": [
+                ".cdsapirc",
+                "config.yaml"
+            ],
+            "Deliverables": [
+                ".cdsapirc.example",
+                "config.yaml.example"
+            ],
+            "Acceptance Criteria": "配置文件模板创建完成，包含使用说明"
+        },
+        {
+            "ID": "6",
+            "TaskName": "基础下载功能实现",
+            "Status": "pending",
+            "Description": "实现ECMWF数据下载的核心功能，包括API连接和请求处理",
+            "File": [
+                "src/",
+                "src/downloader.py",
+                "src/api_client.py"
+            ],
+            "Deliverables": [
+                "src/downloader.py",
+                "src/api_client.py"
+            ],
+            "Acceptance Criteria": "能够成功连接CDS API并下载数据"
+        },
+        {
+            "ID": "7",
+            "TaskName": "批量下载功能",
+            "Status": "pending",
+            "Description": "实现批量数据下载功能，支持多任务并发",
+            "File": [
+                "src/batch_downloader.py"
+            ],
+            "Deliverables": [
+                "src/batch_downloader.py"
+            ],
+            "Acceptance Criteria": "能够批量处理多个下载请求"
+        },
+        {
+            "ID": "8",
+            "TaskName": "日志系统实现",
+            "Status": "pending",
+            "Description": "实现日志记录系统，记录下载过程和错误信息",
+            "File": [
+                "src/logger.py"
+            ],
+            "Deliverables": [
+                "src/logger.py"
+            ],
+            "Acceptance Criteria": "日志系统能够记录关键操作和错误"
+        },
+        {
+            "ID": "9",
+            "TaskName": "单元测试编写",
+            "Status": "pending",
+            "Description": "编写核心功能的单元测试",
+            "File": [
+                "tests/",
+                "tests/test_api_client.py",
+                "tests/test_downloader.py"
+            ],
+            "Deliverables": [
+                "tests/test_api_client.py",
+                "tests/test_downloader.py"
+            ],
+            "Acceptance Criteria": "核心功能测试覆盖率>80%"
+        }
+    ]
+}

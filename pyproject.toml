@@ -1,0 +1,61 @@
+[tool.pytest.ini_options]
+# pytest配置文件
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",                     # 详细输出
+    "--strict-markers",       # 严格标记检查
+    "--tb=short",            # 简短的traceback
+    "--cov=src",             # 生成覆盖率报告
+    "--cov-report=term-missing",  # 覆盖率报告格式
+    "--cov-report=html",     # HTML覆盖率报告
+]
+markers = [
+    "unit: 单元测试",
+    "integration: 集成测试",
+    "slow: 慢速测试",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/test_*.py",
+    "*/__pycache__/*",
+    "*/site-packages/*",
+]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+
+[project]
+name = "ecmwf-downloader"
+version = "0.0.1"
+description = "ECMWF气象数据下载工具"
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "cdsapi>=0.7.0",
+    "requests>=2.31.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "PyYAML>=6.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"

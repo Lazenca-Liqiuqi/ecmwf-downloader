@@ -4,7 +4,7 @@ ECMWF下载器自定义异常类
 定义项目中所有自定义异常类型，用于错误分类和针对性处理。
 """
 
-from typing import Optional
+from typing import Any, Optional
 
 
 class DownloadError(Exception):
@@ -72,6 +72,8 @@ class AccountPoolError(DownloadError):
         message: str,
         account_id: Optional[str] = None,
         available_count: Optional[int] = None,
+        file_path: Optional[str] = None,
+        original_error: Optional[Exception] = None,
     ):
         """初始化账号池异常
 
@@ -79,16 +81,24 @@ class AccountPoolError(DownloadError):
             message: 错误消息
             account_id: 相关账号ID（可选）
             available_count: 可用账号数量（可选）
+            file_path: 文件路径（可选）
+            original_error: 原始异常对象（可选）
         """
         details = {}
         if account_id is not None:
             details["account_id"] = account_id
         if available_count is not None:
             details["available_count"] = available_count
+        if file_path is not None:
+            details["file_path"] = file_path
+        if original_error is not None:
+            details["original_error"] = str(original_error)
 
         super().__init__(message, details)
         self.account_id = account_id
         self.available_count = available_count
+        self.file_path = file_path
+        self.original_error = original_error
 
 
 class ProgressLoadError(DownloadError):

@@ -6,17 +6,49 @@
 
 ECMWF（European Centre for Medium-Range Weather Forecasts）提供全球领先的气象数据和预报服务。本项目旨在开发一个便捷的工具，帮助研究人员和开发者高效获取ECMWF Climate Data Store (CDS)中的气象数据，支持气象研究、气候分析和业务应用。
 
+## 当前状态
+
+**版本**：0.0.1
+
+**开发阶段**：第一阶段（核心模块重构）**已完成** 🎉
+
+项目已完成核心模块的实现和测试，包括：
+- ✅ 自定义异常类体系
+- ✅ Pydantic配置模型
+- ✅ 账号池管理（支持多API密钥轮换）
+- ✅ 线程安全进度管理器
+- ✅ API抽象层和CDS客户端
+- ✅ 配置文件模板
+- ✅ 完整的单元测试（188个测试全部通过）
+
 ## 目录结构
 
 ```
 ECMWF downloader/
-├── .claude/
-│   ├── rules/              # 项目规则目录
-│   ├── CLAUDE.md           # 项目提示词
-│   ├── LAST_CLAUDE_PROGRESS.md  # 工作进度记录
-│   └── TASKS.json          # 阶段性任务清单
-├── README.md               # 项目说明（本文件）
-└── CHANGELOG.md            # 版本更新日志
+├── .claude/                      # 项目记忆组件
+│   ├── rules/                    # 项目规则目录
+│   ├── CLAUDE.md                 # 项目提示词
+│   ├── LAST_CLAUDE_PROGRESS.md   # 工作进度记录
+│   └── TASKS.json                # 任务清单
+├── src/                          # 源代码目录
+│   ├── core/                     # 核心业务逻辑层 ✅
+│   │   ├── exceptions.py         # 自定义异常类
+│   │   ├── config.py             # Pydantic配置模型
+│   │   ├── account_pool.py       # 账号池管理
+│   │   └── progress.py           # 进度管理器
+│   ├── api/                      # API抽象层 ✅
+│   │   ├── base.py               # API客户端基类
+│   │   └── cds_client.py         # CDS API客户端
+│   ├── ui/                       # 用户界面层（待开发）
+│   └── utils/                    # 工具模块（待开发）
+├── config/                       # 配置文件目录 ✅
+│   ├── default_config.yaml       # 默认配置模板
+│   └── accounts.yaml             # 账号池配置模板
+├── tests/                        # 测试目录 ✅
+│   ├── test_core/                # 核心模块测试
+│   └── test_api/                 # API模块测试
+├── README.md                     # 项目说明（本文件）
+└── CHANGELOG.md                  # 版本更新日志
 ```
 
 ## 技术栈与技术路线
@@ -25,46 +57,65 @@ ECMWF downloader/
 - **语言**：Python 3.8+
 - **主要依赖**：
   - `cdsapi` - ECMWF CDS数据下载API客户端
-  - `requests` - HTTP请求处理
-  - `xarray` / `netCDF4` - 气象数据处理
-  - `pandas` - 数据表格处理
+  - `pydantic` - 配置验证和数据模型
+  - `PyYAML` - YAML配置文件解析
+  - `pytest` - 单元测试框架
 
 ### 技术架构
 ```
-用户配置层 → API请求层 → 数据下载层 → 数据处理层
-    ↓           ↓            ↓            ↓
-  配置文件   CDS API认证   批量下载    格式转换/存储
+配置层 → API抽象层 → 数据下载层 → 进度管理层
+  ↓         ↓           ↓            ↓
+YAML    BaseAPIClient  CDSClient  ProgressManager
 ```
 
 ### 技术路线
 1. 使用ECMWF Climate Data Store (CDS) API进行数据请求
 2. 支持多种气象数据集（ERA5、ERA5-Land等）
-3. 提供YAML/JSON配置文件管理下载参数
-4. 实现断点续传和并发下载
-5. 支持多种输出格式（NetCDF、GRIB、CSV等）
+3. 提供YAML配置文件管理下载参数
+4. 实现多账号轮换和并发下载
+5. 支持断点续传和进度持久化
 
-## 当前状态
+## 第一阶段交付成果
 
-**版本**：0.0.1
+### 核心模块
+| 模块 | 文件 | 代码行数 | 说明 |
+|------|------|---------|------|
+| 异常类 | exceptions.py | 223行 | 7种自定义异常 |
+| 配置模型 | config.py | 241行 | 9个Pydantic模型 |
+| 账号池 | account_pool.py | 355行 | 多账号管理 |
+| 进度管理 | progress.py | 483行 | 任务进度跟踪 |
+| API基类 | base.py | 172行 | API抽象接口 |
+| CDS客户端 | cds_client.py | 408行 | CDS API实现 |
 
-**开发阶段**：初始化完成
+### 测试覆盖
+| 类型 | 测试数 | 文件 |
+|------|-------|------|
+| 异常类测试 | 27 | test_exceptions.py |
+| 配置模型测试 | 37 | test_config.py |
+| 账号池测试 | 38 | test_account_pool.py |
+| 进度管理测试 | 47 | test_progress.py |
+| CDS客户端测试 | 26 | test_cds_client.py |
+| API基类测试 | 13 | test_base.py |
+| **总计** | **188** | **全部通过** ✅ |
 
-项目已完成基础结构搭建，包括：
-- Git仓库初始化
-- 项目记忆组件配置
-- 开发规划制定
+### 配置模板
+- `config/default_config.yaml`（142行）- 主配置文件模板
+- `config/accounts.yaml`（73行）- 账号池配置模板
 
 ## TODO
 
 ### 近期任务
-- [ ] 配置Python开发环境
-- [ ] 安装项目依赖（cdsapi、xarray等）
-- [ ] 实现CDS API认证功能
-- [ ] 实现单次数据下载功能
-- [ ] 实现批量下载功能
-- [ ] 添加配置文件支持
-- [ ] 实现日志记录系统
-- [ ] 编写单元测试
+**第二阶段：基础GUI框架**（按GUI改造计划）
+- [ ] 创建主窗口框架（CustomTkinter）
+- [ ] 实现侧边栏导航
+- [ ] 实现首页（任务列表页）
+- [ ] 实现配置页面
+- [ ] 实现账号池管理页面
+
+**第三阶段：核心下载功能**
+- [ ] 实现下载引擎（DownloadEngine）
+- [ ] 实现任务管理器（TaskManager）
+- [ ] 实现下载控制页面
 
 ### 中期目标
 - [ ] 支持更多ECMWF数据集类型
@@ -74,7 +125,7 @@ ECMWF downloader/
 - [ ] 添加数据验证功能
 
 ### 长期规划
-- [ ] 开发图形用户界面（GUI）
+- [ ] 完善图形用户界面（GUI）
 - [ ] 实现智能数据缓存机制
 - [ ] 支持分布式下载
 - [ ] 提供Docker容器化部署

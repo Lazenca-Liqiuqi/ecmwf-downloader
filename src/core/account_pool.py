@@ -344,7 +344,7 @@ class AccountPool:
                 "accounts": [
                     {
                         "id": acc.id,
-                        "status": acc.status.value,
+                        "status": acc.status.value if hasattr(acc.status, "value") else acc.status,
                         "used_count": acc.used_count,
                         "fail_count": acc.fail_count,
                         "last_used": acc.last_used,

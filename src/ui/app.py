@@ -11,6 +11,8 @@ from textual.app import App
 from textual.widgets import Header, Footer
 
 from src.ui.screens.home_screen import HomeScreen
+from src.ui.screens.tasks_screen import TasksScreen
+from src.ui.styles.theme import get_global_styles
 
 if TYPE_CHECKING:
     from src.core.account_pool import AccountPool
@@ -27,10 +29,13 @@ class ECMWFDownloaderApp(App):
     # 应用标题
     TITLE = "ECMWF Downloader"
 
+    # 全局 CSS 样式
+    CSS = get_global_styles()
+
     # 屏幕注册（将在后续任务中逐步实现）
     SCREENS = {
         "home": HomeScreen,  # ✅ 首页屏幕已实现
-        # "tasks": TasksScreen,  # ⏳ 任务列表屏幕（待实现）
+        "tasks": TasksScreen,  # ✅ 任务列表屏幕已实现
         # "download": DownloadScreen,  # ⏳ 下载管理屏幕（待实现）
         # "accounts": AccountsScreen,  # ⏳ 账号管理屏幕（待实现）
         # "config": ConfigScreen,  # ⏳ 配置管理屏幕（待实现）

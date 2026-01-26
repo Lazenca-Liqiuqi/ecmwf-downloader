@@ -6,5 +6,6 @@ TUI 屏幕模块
 
 from src.ui.screens.base_screen import BaseScreen
 from src.ui.screens.home_screen import HomeScreen
+from src.ui.screens.tasks_screen import TasksScreen
 
-__all__ = ["BaseScreen", "HomeScreen"]
+__all__ = ["BaseScreen", "HomeScreen", "TasksScreen"]

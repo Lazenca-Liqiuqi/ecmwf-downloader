@@ -4,7 +4,7 @@
 ECMWF（European Centre for Medium-Range Weather Forecasts，欧洲中期天气预报中心）提供全球领先的气象数据和预报服务。本项目旨在开发一个Python工具，用于自动化下载和管理ECMWF的气象数据，支持气象研究、气候分析和业务应用。
 
 ## 项目阶段
-**当前阶段**：第一阶段（核心模块重构）**已完成** 🎉
+**当前阶段**：第二阶段（TUI 基础框架）**已完成** 🎉
 **版本**：v0.0.1
 
 ## 目录结构
@@ -25,7 +25,22 @@ ECMWF（European Centre for Medium-Range Weather Forecasts，欧洲中期天气�
 │   ├── api/                      # API抽象层 ✅
 │   │   ├── base.py               # API客户端基类
 │   │   └── cds_client.py         # CDS API客户端
-│   ├── ui/                       # 用户界面层（待开发）
+│   ├── ui/                       # 用户界面层 ✅ TUI框架完成
+│   │   ├── app.py                # TUI应用主入口
+│   │   ├── screens/              # 屏幕模块
+│   │   │   ├── base_screen.py    # 基础屏幕类
+│   │   │   ├── home_screen.py    # 首页屏幕
+│   │   │   ├── tasks_screen.py   # 任务列表屏幕
+│   │   │   ├── download_screen.py# 下载管理屏幕
+│   │   │   ├── accounts_screen.py# 账号管理屏幕
+│   │   │   └── config_screen.py  # 配置管理屏幕
+│   │   ├── widgets/              # 自定义组件
+│   │   │   ├── task_table.py     # 任务表格组件
+│   │   │   └── account_table.py  # 账号表格组件
+│   │   ├── workers/              # 后台任务
+│   │   │   └── download_worker.py# 下载执行Worker
+│   │   └── styles/               # 样式文件
+│   │       └── theme.py          # 主题配置
 │   └── utils/                    # 工具模块（待开发）
 ├── config/                       # 配置文件目录 ✅
 │   ├── default_config.yaml       # 默认配置模板
@@ -65,19 +80,20 @@ ECMWF（European Centre for Medium-Range Weather Forecasts，欧洲中期天气�
 **单元测试**：188个测试全部通过 ✅
 
 ## 下一步规划
-根据GUI改造计划，下一阶段可选择：
+根据TUI改造计划，已完成第一、二阶段，下一阶段可选择：
 
-**第二阶段：基础GUI框架**
-- 主窗口框架
-- 侧边栏导航
-- 首页（任务列表）
-- 配置页面
-- 账号池管理页面
+**第三阶段：功能完善与优化**
+- 实现添加/编辑账号对话框
+- 实现日志查看器组件
+- 添加快捷键支持
+- 优化样式和颜色主题
+- 实现导出功能
 
-**第三阶段：核心下载功能**
-- 下载引擎（DownloadEngine）
-- 任务管理器（TaskManager）
-- 下载控制页面
+**第四阶段：核心下载功能集成**
+- 集成下载Worker与控制按钮
+- 实现批量下载功能
+- 添加下载进度实时更新
+- 实现断点续传功能
 
 ## 资源
 - [ECMWF Climate Data Store (CDS)](https://cds.climate.copernicus.eu/)

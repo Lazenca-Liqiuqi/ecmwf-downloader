@@ -294,6 +294,91 @@ TASKS_CSS = """
 
 
 # =============================================================================
+# 下载管理专用样式
+# =============================================================================
+DOWNLOAD_CSS = """
+/* 下载管理屏幕特有样式 */
+
+/* 下载容器 */
+#download-container {
+    padding: 1 1 1 4;
+    margin-left: 2;
+}
+
+/* 标题 */
+#download-title {
+    text-align: left;
+    text-style: bold;
+    color: $accent;
+    margin-top: 1;
+    margin-bottom: 2;
+    margin-left: 2;
+}
+
+/* 进度区域 */
+#progress-section {
+    height: 8;
+    margin: 1 3 1 5;
+    padding: 1 1;
+}
+
+#progress-label {
+    text-align: left;
+    text-style: bold;
+    margin-bottom: 1;
+    color: $text 80%;
+}
+
+#overall-progress {
+    width: 1fr;
+    margin: 0 0;
+}
+
+#progress-stats {
+    height: 2;
+    margin-top: 1;
+}
+
+#progress-stats Label {
+    width: 1fr;
+    text-align: center;
+}
+
+/* 活动任务区域 */
+#active-tasks-section {
+    height: 16;
+    margin: 1 3 1 5;
+    padding: 0 1;
+}
+
+#active-label {
+    text-align: left;
+    text-style: bold;
+    margin-bottom: 1;
+    color: $text 80%;
+}
+
+#active-table {
+    height: 1fr;
+    border: solid $panel;
+}
+
+/* 控制按钮区域 */
+#control-section {
+    height: 3;
+    margin: 1 3 1 5;
+    padding: 0 1;
+}
+
+#control-section Button {
+    width: 1fr;
+    margin: 0 1;
+    padding: 0 1;
+}
+"""
+
+
+# =============================================================================
 # 组件样式常量（供 Python 代码使用）
 # =============================================================================
 
@@ -347,6 +432,15 @@ def get_tasks_styles() -> str:
         str: 任务列表 CSS 样式字符串
     """
     return TASKS_CSS
+
+
+def get_download_styles() -> str:
+    """获取下载管理屏幕专用 CSS 样式
+
+    Returns:
+        str: 下载管理 CSS 样式字符串
+    """
+    return DOWNLOAD_CSS
 
 
 def get_status_color(status: str) -> str:

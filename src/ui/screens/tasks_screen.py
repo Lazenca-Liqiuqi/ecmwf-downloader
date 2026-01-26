@@ -7,9 +7,10 @@ ECMWF Downloader TUI 任务列表屏幕模块
 from typing import Iterable
 
 from textual.containers import Container, Horizontal, Vertical
-from textual.widgets import Button, DataTable, Header, Footer, Input, Label
+from textual.widgets import Button, Header, Footer, Input, Label
 
 from src.core.progress import TaskStatus
+from src.ui.widgets.task_table import TaskTable
 from src.ui.screens.base_screen import BaseScreen
 from src.ui.styles.theme import get_tasks_styles
 
@@ -72,16 +73,8 @@ class TasksScreen(BaseScreen):
 
     def _setup_table(self) -> None:
         """设置任务表格列"""
-        table = self.query_one("#tasks-table", DataTable)
-        table.cursor_type = "row"
-        table.zebra_stripes = True
-
-        # 添加列
-        table.add_column("任务ID", width=20)
-        table.add_column("文件名", width=30)
-        table.add_column("状态", width=10)
-        table.add_column("进度", width=8)
-        table.add_column("创建时间", width=20)
+        # TaskTable 组件会在 on_mount 时自动初始化列
+        pass
 
     def _load_tasks(self, status_filter: str = "all", search_text: str = "") -> None:
         """加载任务数据到表格
@@ -90,8 +83,7 @@ class TasksScreen(BaseScreen):
             status_filter: 状态筛选（all/pending/downloading/completed/failed）
             search_text: 搜索文本
         """
-        table = self.query_one("#tasks-table", DataTable)
-        table.clear()
+        table = self.query_one("#tasks-table", TaskTable)
 
         # 获取任务列表
         if status_filter == "all":
@@ -120,20 +112,8 @@ class TasksScreen(BaseScreen):
         # 按创建时间降序排序
         tasks = sorted(tasks, key=lambda t: t.created_at, reverse=True)
 
-        # 填充表格
-        for task in tasks:
-            status_text = self.get_status_text(task.status)
-            progress_text = f"{task.progress:.1f}%"
-            created_time = task.created_at[:19] if task.created_at else ""
-
-            # 使用颜色标记状态
-            table.add_row(
-                task.task_id,
-                task.filename,
-                status_text,
-                progress_text,
-                created_time,
-            )
+        # 使用 TaskTable 的 load_tasks 方法加载
+        table.load_tasks(tasks)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """按钮点击事件处理"""
@@ -194,14 +174,12 @@ class TasksScreen(BaseScreen):
 
     def _handle_retry(self) -> None:
         """处理重试操作"""
-        table = self.query_one("#tasks-table", DataTable)
-        if table.cursor_row is None:
+        table = self.query_one("#tasks-table", TaskTable)
+        task_id = table.get_selected_task_id()
+
+        if task_id is None:
             self.notify("请先选择一个任务", severity="warning")
             return
-
-        # 获取选中行的任务ID
-        cell_key = table.get_cell_at(table.cursor_row, 0)
-        task_id = str(cell_key.value)
 
         # 检查任务状态
         tasks = self.app.progress_manager.get_all_tasks()
@@ -215,28 +193,24 @@ class TasksScreen(BaseScreen):
 
     def _handle_cancel(self) -> None:
         """处理取消操作"""
-        table = self.query_one("#tasks-table", DataTable)
-        if table.cursor_row is None:
+        table = self.query_one("#tasks-table", TaskTable)
+        task_id = table.get_selected_task_id()
+
+        if task_id is None:
             self.notify("请先选择一个任务", severity="warning")
             return
-
-        # 获取选中行的任务ID
-        cell_key = table.get_cell_at(table.cursor_row, 0)
-        task_id = str(cell_key.value)
 
         # TODO: 实现取消逻辑
         self.notify(f"取消任务 {task_id} 功能待实现", severity="information")
 
     def _handle_delete(self) -> None:
         """处理删除操作"""
-        table = self.query_one("#tasks-table", DataTable)
-        if table.cursor_row is None:
+        table = self.query_one("#tasks-table", TaskTable)
+        task_id = table.get_selected_task_id()
+
+        if task_id is None:
             self.notify("请先选择一个任务", severity="warning")
             return
-
-        # 获取选中行的任务ID
-        cell_key = table.get_cell_at(table.cursor_row, 0)
-        task_id = str(cell_key.value)
 
         # 删除任务
         success = self.app.progress_manager.delete_task(task_id)
@@ -268,9 +242,12 @@ class TasksScreen(BaseScreen):
     def _on_progress_update(self, task_id: str, task_info) -> None:
         """进度更新时刷新任务列表
 
+        使用增量更新提高性能，只更新变化的行。
+
         Args:
             task_id: 任务ID
             task_info: 任务信息
         """
-        # 刷新任务列表
-        self.refresh_data()
+        table = self.query_one("#tasks-table", TaskTable)
+        # 使用 TaskTable 的增量更新方法
+        table.update_row(task_info)

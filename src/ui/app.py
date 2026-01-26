@@ -12,6 +12,9 @@ from textual.widgets import Header, Footer
 
 from src.ui.screens.home_screen import HomeScreen
 from src.ui.screens.tasks_screen import TasksScreen
+from src.ui.screens.download_screen import DownloadScreen
+from src.ui.screens.accounts_screen import AccountsScreen
+from src.ui.screens.config_screen import ConfigScreen
 from src.ui.styles.theme import get_global_styles
 
 if TYPE_CHECKING:
@@ -36,9 +39,9 @@ class ECMWFDownloaderApp(App):
     SCREENS = {
         "home": HomeScreen,  # ✅ 首页屏幕已实现
         "tasks": TasksScreen,  # ✅ 任务列表屏幕已实现
-        # "download": DownloadScreen,  # ⏳ 下载管理屏幕（待实现）
-        # "accounts": AccountsScreen,  # ⏳ 账号管理屏幕（待实现）
-        # "config": ConfigScreen,  # ⏳ 配置管理屏幕（待实现）
+        "download": DownloadScreen,  # ✅ 下载管理屏幕已实现
+        "accounts": AccountsScreen,  # ✅ 账号管理屏幕已实现
+        "config": ConfigScreen,  # ✅ 配置管理屏幕已实现
     }
 
     # 全局快捷键绑定

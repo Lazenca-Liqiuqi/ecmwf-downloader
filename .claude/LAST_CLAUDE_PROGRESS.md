@@ -1,124 +1,139 @@
-## 项目概况
-ECMWF Downloader是一个用于下载ECMWF（欧洲中期天气预报中心）气象数据的Python工具。项目正在进行GUI改造，将现有的命令行脚本改造为功能完整的桌面应用程序。
+# 上次工作进度
 
-## 工作任务
-本次对话完成了第一阶段（核心模块重构）的最后3个任务，包括配置文件模板创建和全面的单元测试编写。
+## 工作日期
+2026-01-26
 
 ## 工作内容
 
-### 任务#8：创建配置文件模板 ✅
-创建两个YAML配置文件模板，为用户提供开箱即用的配置管理：
+### 第二阶段启动：TUI界面开发规划与基础搭建
 
-**config/default_config.yaml**（142行）：
-- 下载任务配置（数据集、变量、时间范围、气压层等）
-- 账号池配置（引用单独的accounts.yaml）
-- 并发下载配置（批次大小、最大工作线程数、重试策略）
-- 进度管理配置（启用状态、文件路径、自动保存间隔）
-- 日志配置（级别、输出路径、文件轮转）
+**背景**：
+- 项目已完成第一阶段核心模块重构（188个测试全部通过）
+- 用户决定使用 Textual 框架开发 TUI（终端用户界面），替代原来的 CLI 计划
 
-**config/accounts.yaml**（73行）：
-- 账号池配置模板
-- 3个示例账号配置（第1个激活，其他注释）
-- 详细的账号使用建议
-- 安全警告和获取ECMWF凭据的指南
+**执行的操作**：
+1. **探索现有核心模块**：
+   - 使用 Explore agent 分析 `src/core/` 和 `src/api/` 模块接口
+   - 确认 ProgressManager 的观察者模式可用
+   - 确认 AccountPool 线程安全设计完善
+   - 发现 CDSClient 的 `download()` 是同步阻塞方法
 
-### 任务#9：编写核心模块单元测试 ✅
-创建全面的单元测试套件，确保代码质量和功能正确性：
+2. **研究 Textual 框架**：
+   - 使用 Explore agent 研究 Textual 架构（App、Widget、Screen）
+   - 了解消息传递机制和事件驱动模型
+   - 研究后台 Worker（@work 装饰器）
+   - 确认由于 cdsapi 是同步库，必须使用 `@work(thread=True)`
 
-**测试文件**（6个文件，约3,300行测试代码）：
-- `tests/test_core/test_exceptions.py`（280行）- 7种异常类的测试
-- `tests/test_core/test_config.py`（550行）- 9个Pydantic配置模型的测试
-- `tests/test_core/test_account_pool.py`（550行）- 账号池管理器的测试
-- `tests/test_core/test_progress.py`（750行）- 进度管理器的测试
-- `tests/test_api/test_cds_client.py`（550行）- CDS API客户端的测试
-- `tests/test_api/test_base.py`（380行）- API抽象基类的测试
+3. **制定实现方案**：
+   - 使用 Plan agent 设计完整的 TUI 架构
+   - 划分为4个阶段：基础框架 → 核心功能 → 配置账号管理 → 优化完善
+   - 创建任务列表（13个任务）
 
-**测试覆盖**：
-- 单元测试：150+
-- 参数验证测试：30+
-- 异常处理测试：20+
-- 线程安全测试：4
-- 持久化测试：8+
+4. **完成第一个任务**：
+   - 创建 UI 目录结构：`src/ui/screens/`、`widgets/`、`workers/`、`styles/`
+   - 添加 `__init__.py` 文件
 
-**测试结果**：188个测试全部通过 ✅
+**技术决策**：
+- **UI 框架**：Textual（Python TUI 框架）
+- **下载执行**：`@work(thread=True)`（因为 cdsapi 是同步阻塞的）
+- **实时更新**：利用 ProgressManager 的观察者模式
+- **线程安全**：使用 `call_from_thread()` 确保 UI 更新在主线程
 
-**测试配置**：
-- `pyproject.toml` - pytest配置和项目元数据
+## 当前状态
 
-### 代码修复
-在测试过程中发现并修复的问题：
-1. `src/core/exceptions.py` - 添加缺失的`Any`类型导入
-2. `src/core/account_pool.py` - 修复`get_usage_summary()`中枚举值访问问题
-3. `src/core/exceptions.py` - 扩展`AccountPoolError`支持`file_path`和`original_error`参数
+**已完成**：
+- ✅ 核心模块重构（100%）
+  - `src/core/` - 异常类、配置、账号池、进度管理
+  - `src/api/` - API基类、CDS客户端
+  - `config/` - 配置文件模板
+  - `tests/` - 188个单元测试全部通过
+- ✅ TUI 规划与目录结构（1/13）
+  - `src/ui/` - UI模块目录结构
+  - `src/ui/screens/` - 屏幕模块
+  - `src/ui/widgets/` - 自定义组件
+  - `src/ui/workers/` - 后台任务
+  - `src/ui/styles/` - 样式文件
+
+**待开发**：
+- ⏳ TUI 基础框架（12个任务待完成）
+  - 应用主入口 (app.py)
+  - 基础屏幕类 (base_screen.py)
+  - 首页屏幕 (home_screen.py)
+  - 样式系统 (theme.py)
+  - 启动脚本 (__main__.py)
+- ⏳ TUI 核心功能
+  - 任务列表屏幕
+  - 任务表格组件
+  - 下载管理屏幕
+  - 下载执行Worker
+- ⏳ TUI 配置与账号管理
+  - 账号管理屏幕
+  - 账号表格组件
+  - 配置管理屏幕
+
+## 下一步计划
+
+**第二阶段：TUI 界面开发（进行中）**
+
+### 任务列表
+1. ✅ 创建UI目录结构
+2. ⏳ 实现应用主入口 (app.py)
+3. ⏳ 实现基础屏幕类 (base_screen.py)
+4. ⏳ 实现首页屏幕 (home_screen.py)
+5. ⏳ 实现样式系统 (theme.py)
+6. ⏳ 创建启动脚本 (__main__.py)
+7. ⏳ 实现任务列表屏幕 (tasks_screen.py)
+8. ⏳ 实现任务表格组件 (task_table.py)
+9. ⏳ 实现下载管理屏幕 (download_screen.py)
+10. ⏳ 实现下载执行Worker (download_worker.py)
+11. ⏳ 实现账号管理屏幕 (accounts_screen.py)
+12. ⏳ 实现账号表格组件 (account_table.py)
+13. ⏳ 实现配置管理屏幕 (config_screen.py)
+
+### 关键技术点
+- **线程安全下载**：`@work(thread=True)` + `call_from_thread()`
+- **观察者模式**：集成 ProgressManager 的观察者实现实时更新
+- **延迟加载**：核心模块通过 property 延迟初始化
 
 ## 交付物
 
-**配置文件**：
-- `config/default_config.yaml`（142行）
-- `config/accounts.yaml`（73行）
+**本次工作交付**：
+- 计划文件：`C:\Users\pc\.claude\plans\sorted-finding-kernighan.md`
+- UI 目录结构：
+  - `src/ui/__init__.py`
+  - `src/ui/screens/__init__.py`
+  - `src/ui/widgets/__init__.py`
+  - `src/ui/workers/__init__.py`
+  - `src/ui/styles/__init__.py`
 
-**测试文件**：
-- `tests/__init__.py`
-- `tests/test_core/__init__.py`
-- `tests/test_api/__init__.py`
-- `tests/test_core/test_exceptions.py`（280行）
-- `tests/test_core/test_config.py`（550行）
-- `tests/test_core/test_account_pool.py`（550行）
-- `tests/test_core/test_progress.py`（750行）
-- `tests/test_api/test_cds_client.py`（550行）
-- `tests/test_api/test_base.py`（380行）
+## 工具与技术
 
-**配置文件**：
-- `pyproject.toml`（pytest配置）
+**使用的工具**：
+- Plan mode（规划模式）
+- Explore agents（探索代码库）
+- Plan agent（设计实现方案）
+- Task 工具（任务管理）
 
-**总计**：
-- 约215行配置模板
-- 约3,330行测试代码
-- 188个测试用例全部通过
+**技术栈**：
+- **Textual** >= 0.50.0（TUI 框架）
+- **textual.worker**（后台任务）
+- **cdsapi**（ECMWF API 客户端，同步库）
+- **现有核心模块**：ProgressManager、AccountPool、CDSClient
 
-## 状态变动
-- **版本**：v0.0.1（初始化阶段）
-- **项目阶段**：第一阶段（核心模块重构）**已完成** 🎉
-- **任务进度**：9/9 已完成（100%）
+## 文件位置
 
-## 第一阶段总结
-**已完成的9个任务**：
-1. ✅ 创建项目目录结构
-2. ✅ 实现自定义异常类
-3. ✅ 实现Pydantic配置模型
-4. ✅ 创建账号池管理模块
-5. ✅ 实现线程安全进度管理器
-6. ✅ 创建API抽象基类
-7. ✅ 实现CDS API客户端
-8. ✅ 创建配置文件模板
-9. ✅ 编写核心模块单元测试
+**根目录**：`D:\data\project\ECMWF downloader`
 
-**第一阶段目标达成** 🎯
-- 核心业务逻辑层已完全实现并通过测试
-- API抽象层已实现并通过测试
-- 配置文件模板已创建
-- 单元测试覆盖率达到验收标准
+**关键路径**：
+- 源代码：`src/`
+- UI 模块：`src/ui/`
+- 配置模板：`config/`
+- 测试：`tests/`
+- 旧脚本：`ERA5_download.py`（待迁移）
 
-**代码统计**：
-- 生产代码：约2,000+行
-- 测试代码：约3,300+行
-- 配置模板：约215行
+## 备注
 
-## 下一步规划
-第二阶段：基础GUI框架（按GUI改造计划）
-- 创建主窗口框架
-- 实现侧边栏导航
-- 实现首页（任务列表页）
-- 实现配置页面
-- 实现账号池管理页面
-
-或第三阶段：核心下载功能
-- 实现下载引擎（DownloadEngine）
-- 实现任务管理器（TaskManager）
-- 实现下载控制页面
-
-## 工具
-- **工具**：Task、Write、Read、Edit、Bash
-- **框架**：pytest、unittest.mock
-- **依赖**：cdsapi、pyyaml、pydantic
-- **规范参考**：项目记忆skill、GUI改造计划文档
+- 技术栈从 CLI（click）调整为 TUI（Textual）
+- TUI 提供更丰富的交互体验和实时进度显示
+- 充分利用现有核心模块的架构（观察者模式、线程安全）
+- 任务列表已创建，共13个任务，当前完成1个

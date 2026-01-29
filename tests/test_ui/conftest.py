@@ -10,6 +10,11 @@ from pathlib import Path
 from src.ui.app import ECMWFDownloaderApp
 
 
+# 配置pytest-asyncio自动模式
+# 这使得所有async def测试函数自动被视为异步测试
+pytest_plugins = ("pytest_asyncio",)
+
+
 @pytest.fixture
 def temp_config_dir(tmp_path):
     """创建临时配置目录

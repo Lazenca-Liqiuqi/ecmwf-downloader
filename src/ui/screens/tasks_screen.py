@@ -52,7 +52,7 @@ class TasksScreen(BaseScreen):
                 yield Button("失败", id="filter-failed", variant="default")
 
             # 任务表格
-            yield DataTable(id="tasks-table")
+            yield TaskTable(id="tasks-table")
 
             # 操作按钮区域
             with Horizontal(id="actions-container"):

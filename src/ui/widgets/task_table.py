@@ -7,6 +7,7 @@ ECMWF Downloader TUI 任务表格组件
 from typing import List, Optional
 
 from textual.widgets import DataTable
+from textual.widgets._data_table import RowDoesNotExist
 
 from src.core.progress import TaskInfo, TaskStatus
 from src.ui.styles.theme import get_status_color
@@ -132,9 +133,16 @@ class TaskTable(DataTable):
         if self.cursor_row is None:
             return None
 
-        # 获取选中行的第一列（任务ID）
-        cell_key = self.get_cell_at(self.cursor_row, 0)
-        return str(cell_key.value)
+        # 获取整行数据，取第一列（任务ID）
+        try:
+            row_values = self.get_row_at(self.cursor_row)
+            if row_values and len(row_values) > 0:
+                # get_row_at 返回的是值列表，不是 Cell 对象
+                return str(row_values[0])
+        except (IndexError, KeyError, RowDoesNotExist):
+            # 行索引无效（表格为空或行不存在）
+            pass
+        return None
 
     def _format_status_text(self, status: TaskStatus) -> str:
         """格式化状态文本

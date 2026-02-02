@@ -7,6 +7,7 @@ ECMWF Downloader TUI 账号表格组件
 from typing import List
 
 from textual.widgets import DataTable
+from textual.widgets._data_table import RowDoesNotExist
 
 from src.core.config import AccountInfo, AccountStatus
 
@@ -145,9 +146,16 @@ class AccountTable(DataTable):
         if self.cursor_row is None:
             return None
 
-        # 获取选中行的第一列（账号ID）
-        cell_key = self.get_cell_at(self.cursor_row, 0)
-        return str(cell_key.value)
+        # 获取整行数据，取第一列（账号ID）
+        try:
+            row_values = self.get_row_at(self.cursor_row)
+            if row_values and len(row_values) > 0:
+                # get_row_at 返回的是值列表，不是 Cell 对象
+                return str(row_values[0])
+        except (IndexError, KeyError, RowDoesNotExist):
+            # 行索引无效（表格为空或行不存在）
+            pass
+        return None
 
     def _format_status_text(self, status: AccountStatus) -> str:
         """格式化状态文本

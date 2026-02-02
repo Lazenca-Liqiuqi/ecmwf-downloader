@@ -56,6 +56,9 @@ class BaseScreen(Screen):
 
         在屏幕隐藏时调用。
         """
+        # 注销进度观察者（防止递归和内存泄漏）
+        self._unregister_progress_observer()
+
         # 调用子类的清理钩子
         self.on_screen_unmount()
 
@@ -85,6 +88,18 @@ class BaseScreen(Screen):
             )
             self._observer_registered = True
             self.log.info(f"[{self.__class__.__name__}] 进度观察者已注册")
+
+    def _unregister_progress_observer(self) -> None:
+        """注销进度管理器观察者
+
+        在屏幕卸载时调用，防止递归和内存泄漏。
+        """
+        if self._observer_registered:
+            self.app.progress_manager.unregister_observer(
+                self._progress_observer_callback
+            )
+            self._observer_registered = False
+            self.log.info(f"[{self.__class__.__name__}] 进度观察者已注销")
 
     def _progress_observer_callback(
         self, task_id: str, task_info: "TaskInfo"

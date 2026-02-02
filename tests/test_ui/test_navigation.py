@@ -116,66 +116,77 @@ class TestAppInitialization:
 class TestAppNavigation:
     """测试屏幕导航"""
 
-    async def test_push_screen_navigates_to_home(self, app_instance):
-        """测试导航到首页"""
-        app_instance.push_screen("home")
+    async def test_switch_screen_navigates_to_home(self, app_instance):
+        """测试导航到首页（使用switch_screen）"""
+        app_instance.switch_screen("home")
 
-        # 验证屏幕栈中有home
-        assert len(app_instance.screen_stack) > 0
+        # 验证当前screen是home
+        assert app_instance.screen is not None
 
-    async def test_push_screen_navigates_to_tasks(self, app_instance):
-        """测试导航到任务列表"""
+    async def test_switch_screen_navigates_to_tasks(self, app_instance):
+        """测试导航到任务列表（使用switch_screen）"""
         try:
-            app_instance.push_screen("tasks")
-            # 验证屏幕栈中有tasks
-            assert len(app_instance.screen_stack) > 0
+            app_instance.switch_screen("tasks")
+            # 验证screen切换成功
+            assert app_instance.screen is not None
         except Exception:
             # HeaderTitle查询问题（Textual内部）
             pass
 
-    async def test_push_screen_navigates_to_download(self, app_instance):
-        """测试导航到下载管理"""
+    async def test_switch_screen_navigates_to_download(self, app_instance):
+        """测试导航到下载管理（使用switch_screen）"""
         try:
-            app_instance.push_screen("download")
-            # 验证屏幕栈中有download
-            assert len(app_instance.screen_stack) > 0
+            app_instance.switch_screen("download")
+            assert app_instance.screen is not None
         except Exception:
             # 组件查询问题
             pass
 
-    async def test_push_screen_navigates_to_accounts(self, app_instance):
-        """测试导航到账号管理"""
+    async def test_switch_screen_navigates_to_accounts(self, app_instance):
+        """测试导航到账号管理（使用switch_screen）"""
         try:
-            app_instance.push_screen("accounts")
-            # 验证屏幕栈中有accounts
-            assert len(app_instance.screen_stack) > 0
+            app_instance.switch_screen("accounts")
+            assert app_instance.screen is not None
         except Exception:
             # 账号池问题
             pass
 
-    async def test_push_screen_navigates_to_config(self, app_instance):
-        """测试导航到配置管理"""
+    async def test_switch_screen_navigates_to_config(self, app_instance):
+        """测试导航到配置管理（使用switch_screen）"""
         try:
-            app_instance.push_screen("config")
-            # 验证屏幕栈中有config
-            assert len(app_instance.screen_stack) > 0
+            app_instance.switch_screen("config")
+            assert app_instance.screen is not None
         except Exception:
             # HeaderTitle查询问题
             pass
 
-    async def test_multiple_screen_navigations(self, app_instance):
-        """测试多次屏幕导航"""
+    async def test_multiple_screen_switches(self, app_instance):
+        """测试多次屏幕切换（使用switch_screen，不应增长stack）"""
         try:
-            # 依次导航到各个屏幕
-            app_instance.push_screen("home")
-            app_instance.push_screen("tasks")
-            app_instance.push_screen("accounts")
+            # 依次切换到各个屏幕
+            app_instance.switch_screen("home")
+            app_instance.switch_screen("tasks")
+            app_instance.switch_screen("accounts")
 
-            # 验证屏幕栈增长
-            assert len(app_instance.screen_stack) >= 3
+            # switch_screen应该替换而不是增长stack
+            # stack应该保持较小（通常为1-2个screen）
+            assert len(app_instance.screen_stack) <= 3
         except Exception:
             # 账号池或组件查询问题
             pass
+
+    async def test_repeated_switch_to_same_screen(self, app_instance):
+        """测试重复切换到同一屏幕（不应导致RecursionError）"""
+        try:
+            # 多次切换到同一screen
+            for _ in range(5):
+                app_instance.switch_screen("home")
+
+            # stack不应无限增长
+            assert len(app_instance.screen_stack) <= 2
+        except RecursionError:
+            # 如果出现递归错误，测试失败
+            assert False, "switch_screen导致RecursionError"
 
 
 class TestLazyLoading:

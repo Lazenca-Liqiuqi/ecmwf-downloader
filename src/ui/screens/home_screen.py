@@ -88,22 +88,19 @@ class HomeScreen(BaseScreen):
 
         if button_id == "btn-tasks":
             # 导航到任务列表屏幕
-            self.app.push_screen("tasks")
+            self.app.switch_screen("tasks")
 
         elif button_id == "btn-download":
-            # 导航到下载管理屏幕（待实现）
-            self.notify("下载管理屏幕开发中...", severity="information")
-            # self.app.push_screen("download")
+            # 导航到下载管理屏幕
+            self.app.switch_screen("download")
 
         elif button_id == "btn-accounts":
-            # 导航到账号管理屏幕（待实现）
-            self.notify("账号管理屏幕开发中...", severity="information")
-            # self.app.push_screen("accounts")
+            # 导航到账号管理屏幕
+            self.app.switch_screen("accounts")
 
         elif button_id == "btn-config":
-            # 导航到配置管理屏幕（待实现）
-            self.notify("配置管理屏幕开发中...", severity="information")
-            # self.app.push_screen("config")
+            # 导航到配置管理屏幕
+            self.app.switch_screen("config")
 
     def refresh_data(self) -> None:
         """刷新统计数据和最近任务"""

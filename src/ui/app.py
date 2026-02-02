@@ -45,14 +45,15 @@ class ECMWFDownloaderApp(App):
     }
 
     # 全局快捷键绑定
+    # 使用 switch_screen 替代 push_screen 避免stack无限增长导致RecursionError
     BINDINGS = [
         ("q", "quit", "退出"),
         ("ctrl+c", "quit", "退出"),
-        ("h", "push_screen('home')", "首页"),  # 待实现
-        ("t", "push_screen('tasks')", "任务"),  # 待实现
-        ("d", "push_screen('download')", "下载"),  # 待实现
-        ("a", "push_screen('accounts')", "账号"),  # 待实现
-        ("c", "push_screen('config')", "配置"),  # 待实现
+        ("h", "switch_screen('home')", "首页"),
+        ("t", "switch_screen('tasks')", "任务"),
+        ("d", "switch_screen('download')", "下载"),
+        ("a", "switch_screen('accounts')", "账号"),
+        ("c", "switch_screen('config')", "配置"),
     ]
 
     # 默认使用 Header 和 Footer

@@ -2,30 +2,45 @@
 ECMWF Downloader TUI 应用主入口
 
 基于 Textual 框架的终端用户界面应用。
+采用侧边栏布局架构，包含导航侧边栏和内容区域。
 """
 
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import Dict, Iterable, Optional, TYPE_CHECKING
 
 from textual.app import App
-from textual.widgets import Header, Footer
+from textual.containers import Horizontal
+from textual.widgets import Footer, Header
 
-from src.ui.screens.home_screen import HomeScreen
-from src.ui.screens.tasks_screen import TasksScreen
-from src.ui.screens.download_screen import DownloadScreen
-from src.ui.screens.accounts_screen import AccountsScreen
-from src.ui.screens.config_screen import ConfigScreen
 from src.ui.styles.theme import get_global_styles
+from src.ui.widgets.content_area import ContentArea
+from src.ui.widgets.contents.accounts_content import AccountsContent
+from src.ui.widgets.contents.config_content import ConfigContent
+from src.ui.widgets.contents.download_content import DownloadContent
+from src.ui.widgets.contents.home_content import HomeContent
+from src.ui.widgets.contents.tasks_content import TasksContent
+from src.ui.widgets.navigation_sidebar import NavigationSidebar
 
 if TYPE_CHECKING:
     from src.core.account_pool import AccountPool
     from src.core.progress import ProgressManager
+    from src.ui.widgets.contents.home_content import HomeContent
+    from src.ui.widgets.contents.tasks_content import TasksContent
+    from src.ui.widgets.contents.download_content import DownloadContent
+    from src.ui.widgets.contents.accounts_content import AccountsContent
+    from src.ui.widgets.contents.config_content import ConfigContent
 
 
 class ECMWFDownloaderApp(App):
     """ECMWF下载器TUI应用主类
 
-    提供基于Textual框架的终端用户界面，管理所有屏幕和导航。
+    提供基于Textual框架的终端用户界面，采用侧边栏布局架构。
+
+    布局结构：
+    - 左侧：NavigationSidebar（导航菜单）
+    - 右侧：ContentArea（内容区域）
+    - 底部：Footer（状态栏）
+
     采用延迟加载模式初始化核心模块，提高启动性能。
     """
 
@@ -35,30 +50,17 @@ class ECMWFDownloaderApp(App):
     # 全局 CSS 样式
     CSS = get_global_styles()
 
-    # 屏幕注册（将在后续任务中逐步实现）
-    SCREENS = {
-        "home": HomeScreen,  # ✅ 首页屏幕已实现
-        "tasks": TasksScreen,  # ✅ 任务列表屏幕已实现
-        "download": DownloadScreen,  # ✅ 下载管理屏幕已实现
-        "accounts": AccountsScreen,  # ✅ 账号管理屏幕已实现
-        "config": ConfigScreen,  # ✅ 配置管理屏幕已实现
-    }
-
     # 全局快捷键绑定
-    # 使用 switch_screen 替代 push_screen 避免stack无限增长导致RecursionError
+    # 使用 action_switch_page 进行页面切换
     BINDINGS = [
         ("q", "quit", "退出"),
         ("ctrl+c", "quit", "退出"),
-        ("h", "switch_screen('home')", "首页"),
-        ("t", "switch_screen('tasks')", "任务"),
-        ("d", "switch_screen('download')", "下载"),
-        ("a", "switch_screen('accounts')", "账号"),
-        ("c", "switch_screen('config')", "配置"),
+        ("h", "action_switch_page('home')", "首页"),
+        ("t", "action_switch_page('tasks')", "任务"),
+        ("d", "action_switch_page('download')", "下载"),
+        ("a", "action_switch_page('accounts')", "账号"),
+        ("c", "action_switch_page('config')", "配置"),
     ]
-
-    # 默认使用 Header 和 Footer
-    # Header: 显示应用标题和当前时间
-    # Footer: 显示快捷键提示
 
     def __init__(
         self,
@@ -84,6 +86,9 @@ class ECMWFDownloaderApp(App):
         self._account_pool: Optional["AccountPool"] = None
         self._progress_manager: Optional["ProgressManager"] = None
 
+        # 内容Widget实例（在on_mount中初始化）
+        self._content_widgets: Dict[str, "HomeContent | TasksContent | DownloadContent | AccountsContent | ConfigContent"] = {}
+
         # 确保数据目录存在
         self._ensure_data_dir()
 
@@ -92,6 +97,81 @@ class ECMWFDownloaderApp(App):
         data_dir = self._progress_path.parent
         if not data_dir.exists():
             data_dir.mkdir(parents=True, exist_ok=True)
+
+    def compose(self) -> Iterable:
+        """构建应用UI
+
+        采用侧边栏布局：
+        - 左侧：NavigationSidebar（导航菜单）
+        - 右侧：ContentArea（内容区域）
+        - 底部：Footer（状态栏）
+        """
+        yield Header()
+        with Horizontal():
+            yield NavigationSidebar()
+            yield ContentArea(id="main-content")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        """应用挂载时的生命周期钩子
+
+        在应用启动后、显示第一个屏幕前调用。
+        用于初始化应用状态、加载数据等。
+        """
+        self.log.info("ECMWF Downloader TUI 启动")
+        self.log.info(f"配置文件: {self._config_path}")
+        self.log.info(f"账号配置: {self._accounts_path}")
+        self.log.info(f"进度文件: {self._progress_path}")
+
+        # 初始化所有内容Widget
+        self._content_widgets = {
+            "home": HomeContent(app=self),
+            "tasks": TasksContent(app=self),
+            "download": DownloadContent(app=self),
+            "accounts": AccountsContent(app=self),
+            "config": ConfigContent(app=self),
+        }
+        self.log.info("内容Widget已初始化")
+
+        # 显示首页
+        self.action_switch_page("home")
+
+        # 显示欢迎消息
+        self.notify(
+            "欢迎使用 ECMWF Downloader！按 'q' 或 Ctrl+C 退出",
+            title="欢迎",
+            severity="information",
+            timeout=5,
+        )
+
+    def action_switch_page(self, page_id: str) -> None:
+        """切换当前显示的页面
+
+        这是Textual的action方法，可以通过BINDINGS或组件调用。
+
+        Args:
+            page_id: 页面ID（home/tasks/download/accounts/config）
+        """
+        # 验证page_id
+        if page_id not in self._content_widgets:
+            self.log.error(f"无效的页面ID: {page_id}")
+            return
+
+        # 更新侧边栏的激活状态
+        try:
+            sidebar = self.query_one(NavigationSidebar)
+            sidebar.current_page = page_id
+        except Exception as e:
+            self.log.warning(f"更新侧边栏状态失败: {e}")
+
+        # 切换内容区域
+        try:
+            content_area = self.query_one("#main-content", ContentArea)
+            content_widget = self._content_widgets[page_id]
+            content_area.switch_content(content_widget)
+            self.log.info(f"页面已切换到: {page_id}")
+        except Exception as e:
+            self.log.error(f"切换页面失败: {e}")
 
     @property
     def account_pool(self) -> "AccountPool":
@@ -128,28 +208,6 @@ class ECMWFDownloaderApp(App):
             )
             self.log.info("进度管理器初始化完成")
         return self._progress_manager
-
-    def on_mount(self) -> None:
-        """应用挂载时的生命周期钩子
-
-        在应用启动后、显示第一个屏幕前调用。
-        用于初始化应用状态、加载数据等。
-        """
-        self.log.info("ECMWF Downloader TUI 启动")
-        self.log.info(f"配置文件: {self._config_path}")
-        self.log.info(f"账号配置: {self._accounts_path}")
-        self.log.info(f"进度文件: {self._progress_path}")
-
-        # 显示欢迎消息
-        self.notify(
-            "欢迎使用 ECMWF Downloader！按 'q' 或 Ctrl+C 退出",
-            title="欢迎",
-            severity="information",
-            timeout=5,
-        )
-
-        # 显示首页屏幕
-        self.push_screen("home")
 
     def on_unmount(self) -> None:
         """应用卸载时的生命周期钩子

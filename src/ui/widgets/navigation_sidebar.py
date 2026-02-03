@@ -6,52 +6,134 @@ ECMWF Downloader TUI 导航侧边栏组件
 
 from typing import Iterable
 
-from textual.containers import Vertical
+from textual.containers import Vertical, Container
 from textual.reactive import reactive
-from textual.widgets import Button
+from textual.widgets import Button, Label
 
 
 class NavigationSidebar(Vertical):
     """导航侧边栏组件
 
     功能：
+    - 显示应用标题和Logo区域
     - 显示5个导航按钮（首页/任务/下载/账号/配置）
-    - 高亮当前选中页面（-active样式类）
+    - 高亮当前选中页面（-active样式类 + 左侧指示条）
     - 响应点击事件，通知App切换页面
     - 支持键盘快捷键（通过App.action）
+    - 显示底部提示信息
 
-    样式：
-    - 固定宽度25字符
-    - 左侧停靠
-    - 深色背景
-    - 右侧边框
+    样式特点：
+    - 固定宽度28字符
+    - 左侧停靠，深色背景
+    - 右侧thick边框（$accent颜色）
+    - 标题区域：30%主色背景 + 底部分隔线
+    - 激活按钮：40%主色背景 + 左侧thick指示条
+    - 悬停效果：15%主色背景柔和高亮
     """
 
     DEFAULT_CSS = """
+    /* ═══════════════════════════════════════════════════════════════
+       导航侧边栏容器 - 深色背景 + 右侧边框
+       ═══════════════════════════════════════════════════════════════ */
     NavigationSidebar {
-        width: 25;
+        width: 28;
         dock: left;
         background: $panel;
-        border-right: solid $accent;
-        padding: 1 0;
+        border-right: thick $accent;
+        padding: 0;
     }
 
+    /* ═══════════════════════════════════════════════════════════════
+       标题区域 - Logo和应用名称
+       ═══════════════════════════════════════════════════════════════ */
+    #sidebar-header {
+        height: 5;
+        background: $primary 30%;
+        border-bottom: solid $accent;
+        padding: 1 1;
+        margin-bottom: 1;
+    }
+
+    #sidebar-logo {
+        text-align: center;
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 0;
+    }
+
+    #sidebar-title {
+        text-align: center;
+        text-style: bold;
+        margin-top: 0;
+        color: $text;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       导航按钮容器 - 分组按钮
+       ═══════════════════════════════════════════════════════════════ */
+    #nav-buttons-container {
+        padding: 0 1;
+        margin: 1 0;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       导航按钮 - 基础样式
+       ═══════════════════════════════════════════════════════════════ */
     NavigationSidebar Button {
         width: 1fr;
+        height: 3;
         margin: 0 0 1 0;
-        padding: 1 2;
+        padding: 0 2;
         text-align: left;
         border: none;
         background: transparent;
+        text-style: none;
+        color: $text 80%;
     }
 
+    /* 悬停效果 - 柔和高亮 */
     NavigationSidebar Button:hover {
-        background: $primary 20%;
+        background: $primary 15%;
+        text-style: bold;
+        color: $text;
     }
 
+    /* 激活状态 - 左侧指示条 + 渐变背景 */
     NavigationSidebar Button.-active {
-        background: $primary;
+        background: $primary 40%;
         text-style: bold;
+        color: $accent;
+        border-left: thick $accent;
+        padding-left: 1;
+    }
+
+    /* 激活状态悬停 - 增强效果 */
+    NavigationSidebar Button.-active:hover {
+        background: $primary 50%;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       分隔线
+       ═══════════════════════════════════════════════════════════════ */
+    #nav-separator {
+        height: 1;
+        margin: 1 1;
+        border-top: solid $panel 80%;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       底部提示区域
+       ═══════════════════════════════════════════════════════════════ */
+    #sidebar-footer {
+        height: 3;
+        padding: 0 1;
+        margin-top: 1;
+    }
+
+    #sidebar-footer Label {
+        text-align: center;
+        color: $text 50%;
+        text-style: italic;
     }
     """
 
@@ -68,14 +150,39 @@ class NavigationSidebar(Vertical):
     current_page = reactive("home")
 
     def compose(self) -> Iterable:
-        """构建侧边栏UI"""
-        for nav_item in self.NAV_ITEMS:
-            # 使用nav-前缀作为按钮ID，便于识别
-            yield Button(
-                nav_item["label"],
-                id=f"nav-{nav_item['id']}",
-                classes="" if nav_item["id"] != "home" else "-active",
-            )
+        """构建侧边栏UI
+
+        结构：
+        - 侧边栏标题区域（Logo + 应用名称）
+        - 导航按钮容器
+        - 分隔线
+        - 底部提示区域
+        """
+        # 标题区域
+        yield Container(
+            Label("🌤️", id="sidebar-logo"),
+            Label("ECMWF", id="sidebar-title"),
+            id="sidebar-header",
+        )
+
+        # 导航按钮容器
+        with Container(id="nav-buttons-container"):
+            for nav_item in self.NAV_ITEMS:
+                # 使用nav-前缀作为按钮ID，便于识别
+                yield Button(
+                    nav_item["label"],
+                    id=f"nav-{nav_item['id']}",
+                    classes="" if nav_item["id"] != "home" else "-active",
+                )
+
+        # 分隔线
+        yield Container(id="nav-separator")
+
+        # 底部提示区域
+        yield Container(
+            Label("按 [q] 退出", id="footer-label"),
+            id="sidebar-footer",
+        )
 
     def on_mount(self) -> None:
         """组件挂载时初始化"""

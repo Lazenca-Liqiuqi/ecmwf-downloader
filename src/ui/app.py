@@ -51,15 +51,16 @@ class ECMWFDownloaderApp(App):
     CSS = get_global_styles()
 
     # 全局快捷键绑定
-    # 使用 action_switch_page 进行页面切换
+    # Textual的BINDINGS要求action必须是方法名，不能带参数
+    # 因此为每个页面创建专门的action方法
     BINDINGS = [
         ("q", "quit", "退出"),
         ("ctrl+c", "quit", "退出"),
-        ("h", "action_switch_page('home')", "首页"),
-        ("t", "action_switch_page('tasks')", "任务"),
-        ("d", "action_switch_page('download')", "下载"),
-        ("a", "action_switch_page('accounts')", "账号"),
-        ("c", "action_switch_page('config')", "配置"),
+        ("h", "go_home", "首页"),
+        ("t", "go_tasks", "任务"),
+        ("d", "go_download", "下载"),
+        ("a", "go_accounts", "账号"),
+        ("c", "go_config", "配置"),
     ]
 
     def __init__(
@@ -137,9 +138,17 @@ class ECMWFDownloaderApp(App):
         # 显示首页
         self.action_switch_page("home")
 
+        # 设置初始焦点在侧边栏
+        try:
+            sidebar = self.query_one(NavigationSidebar)
+            sidebar.focus()
+            self.log.info("初始焦点已设置到侧边栏")
+        except Exception as e:
+            self.log.warning(f"设置初始焦点失败: {e}")
+
         # 显示欢迎消息
         self.notify(
-            "欢迎使用 ECMWF Downloader！按 'q' 或 Ctrl+C 退出",
+            "欢迎使用 ECMWF Downloader！按 Tab 键在侧边栏和内容区域间切换，按 'q' 或 Ctrl+C 退出",
             title="欢迎",
             severity="information",
             timeout=5,
@@ -173,6 +182,27 @@ class ECMWFDownloaderApp(App):
             self.log.info(f"页面已切换到: {page_id}")
         except Exception as e:
             self.log.error(f"切换页面失败: {e}")
+
+    # 专门的action方法供快捷键调用（Textual要求BINDINGS中的action必须是方法名）
+    def action_go_home(self) -> None:
+        """快捷键h：切换到首页"""
+        self.action_switch_page("home")
+
+    def action_go_tasks(self) -> None:
+        """快捷键t：切换到任务页"""
+        self.action_switch_page("tasks")
+
+    def action_go_download(self) -> None:
+        """快捷键d：切换到下载页"""
+        self.action_switch_page("download")
+
+    def action_go_accounts(self) -> None:
+        """快捷键a：切换到账号页"""
+        self.action_switch_page("accounts")
+
+    def action_go_config(self) -> None:
+        """快捷键c：切换到配置页"""
+        self.action_switch_page("config")
 
     @property
     def account_pool(self) -> "AccountPool":

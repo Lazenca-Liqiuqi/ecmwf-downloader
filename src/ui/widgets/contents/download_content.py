@@ -3,11 +3,13 @@ ECMWF Downloader TUI 下载管理内容组件
 
 显示下载任务的整体进度和活动任务列表，提供下载控制功能。
 这是从DownloadScreen迁移而来的Widget版本。
+支持方向键操作：表格用方向键移动，Enter键触发按钮。
 """
 
 from typing import TYPE_CHECKING, Iterable
 
 from textual.containers import Container, Horizontal, Vertical
+from textual.events import Key
 from textual.widget import Widget
 from textual.widgets import Button, Label, ProgressBar
 
@@ -283,3 +285,25 @@ class DownloadContent(Widget):
 
         # 始终更新整体进度
         self._update_overall_progress()
+
+    def on_key(self, event: Key) -> None:
+        """处理键盘事件
+
+        Enter键：如果焦点在按钮上，触发按钮操作
+        方向键：由各个控件自行处理（表格、按钮等）
+        Tab键：返回侧边栏（由ContentArea处理）
+
+        Args:
+            event: 键盘事件
+        """
+        # Enter键处理
+        if event.key == "enter":
+            # 检查焦点是否在按钮上
+            focused = self.app.focused
+            if focused and isinstance(focused, Button):
+                # 触发按钮
+                focused.action_press()
+                event.stop()
+
+        # Tab键交给ContentArea处理（返回侧边栏）
+        # 方向键由各个控件自行处理

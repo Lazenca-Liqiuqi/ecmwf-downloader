@@ -3,11 +3,13 @@ ECMWF Downloader TUI 任务列表内容组件
 
 显示所有下载任务，支持筛选、搜索和操作。
 这是从TasksScreen迁移而来的Widget版本。
+支持方向键操作：表格用方向键移动，Enter键选中行/触发按钮。
 """
 
 from typing import TYPE_CHECKING, Iterable
 
 from textual.containers import Container, Horizontal, Vertical
+from textual.events import Key
 from textual.widget import Widget
 from textual.widgets import Button, Input, Label
 
@@ -343,3 +345,28 @@ class TasksContent(Widget):
         table = self.query_one("#tasks-table", TaskTable)
         # 使用 TaskTable 的增量更新方法
         table.update_row(task_info)
+
+    def on_key(self, event: Key) -> None:
+        """处理键盘事件
+
+        Enter键：如果焦点在按钮上，触发按钮操作；如果在表格上，选中行
+        方向键：由各个控件自行处理（表格、输入框、按钮等）
+        Tab键：返回侧边栏（由ContentArea处理）
+
+        Args:
+            event: 键盘事件
+        """
+        # Enter键处理
+        if event.key == "enter":
+            # 检查焦点所在控件
+            focused = self.app.focused
+            if focused and isinstance(focused, Button):
+                # 焦点在按钮上，触发按钮
+                focused.action_press()
+                event.stop()
+            elif focused:
+                # 焦点在其他控件上（如表格、输入框），由控件自行处理
+                pass
+
+        # Tab键交给ContentArea处理（返回侧边栏）
+        # 方向键由各个控件自行处理

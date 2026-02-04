@@ -3,11 +3,13 @@ ECMWF Downloader TUI 配置管理内容组件
 
 提供下载参数配置表单，支持创建新的下载任务。
 这是从ConfigScreen迁移而来的Widget版本。
+支持方向键操作：输入框用方向键移动光标，Enter键触发按钮。
 """
 
 from typing import Iterable
 
 from textual.containers import Container, Horizontal, Vertical
+from textual.events import Key
 from textual.widget import Widget
 from textual.widgets import Button, Input, Label
 
@@ -302,3 +304,29 @@ class ConfigContent(Widget):
         """组件卸载时清理"""
         # 配置管理不需要观察者模式
         pass
+
+    def on_key(self, event: Key) -> None:
+        """处理键盘事件
+
+        Enter键：如果焦点在按钮上，触发按钮操作；如果在输入框，默认提交表单
+        方向键：由各个控件自行处理（输入框、按钮等）
+        Tab键：返回侧边栏（由ContentArea处理）
+
+        Args:
+            event: 键盘事件
+        """
+        # Enter键处理
+        if event.key == "enter":
+            # 检查焦点所在控件
+            focused = self.app.focused
+            if focused and isinstance(focused, Button):
+                # 焦点在按钮上，触发按钮
+                focused.action_press()
+                event.stop()
+            elif focused and isinstance(focused, Input):
+                # 焦点在输入框上，可以按Tab切换到下一个输入框，或按Enter提交
+                # 这里不阻止Enter，让输入框的默认行为处理（换行等）
+                pass
+
+        # Tab键交给ContentArea处理（返回侧边栏）
+        # 方向键由各个控件自行处理

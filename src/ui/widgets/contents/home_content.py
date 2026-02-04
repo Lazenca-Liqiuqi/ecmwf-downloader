@@ -3,14 +3,16 @@ ECMWF Downloader TUI 首页内容组件
 
 显示应用概览、统计信息和快捷操作入口。
 这是从HomeScreen迁移而来的Widget版本。
+支持方向键操作：Enter键触发当前选中的按钮。
 """
 
 from typing import TYPE_CHECKING, Iterable
 
 from textual.containers import Container, Horizontal, Vertical
 from textual.css.query import NoMatches
+from textual.events import Key
 from textual.widget import Widget
-from textual.widgets import Button, DataTable, Label
+from textual.widgets import DataTable, Label
 
 if TYPE_CHECKING:
     from src.core.progress import TaskInfo, TaskStatus
@@ -84,12 +86,6 @@ class HomeContent(Widget):
         margin-top: 0;
     }
 
-    #actions-container {
-        height: 4;
-        margin: 2 3 2 3;
-        padding: 0 1;
-    }
-
     #recent-title {
         text-align: left;
         text-style: bold;
@@ -138,13 +134,6 @@ class HomeContent(Widget):
                     yield Label("失败", classes="stat-label")
                     yield Label("0", id="stat-failed", classes="stat-value")
 
-            # 快捷操作区域
-            with Horizontal(id="actions-container"):
-                yield Button("任务列表", id="btn-tasks", variant="default")
-                yield Button("下载管理", id="btn-download", variant="default")
-                yield Button("账号管理", id="btn-accounts", variant="default")
-                yield Button("配置管理", id="btn-config", variant="default")
-
             # 最近任务区域
             yield Label("最近任务", id="recent-title")
             yield DataTable(id="recent-table")
@@ -171,35 +160,19 @@ class HomeContent(Widget):
         table.add_column("状态", width=10)
         table.clear()
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        """按钮点击事件处理"""
-        button_id = event.button.id
+    def on_key(self, event: Key) -> None:
+        """处理键盘事件
 
-        # 注意：这里使用App的action_switch_page方法
-        # 该方法将在后续的任务中实现
-        if button_id == "btn-tasks":
-            if hasattr(self._app_ref, "action_switch_page"):
-                self._app_ref.action_switch_page("tasks")
-            else:
-                self._app_ref.switch_screen("tasks")
+        首页只有表格，不需要特殊处理：
+        - 方向键：由表格自行处理（移动行/列）
+        - Tab键：返回侧边栏（由ContentArea处理）
 
-        elif button_id == "btn-download":
-            if hasattr(self._app_ref, "action_switch_page"):
-                self._app_ref.action_switch_page("download")
-            else:
-                self._app_ref.switch_screen("download")
-
-        elif button_id == "btn-accounts":
-            if hasattr(self._app_ref, "action_switch_page"):
-                self._app_ref.action_switch_page("accounts")
-            else:
-                self._app_ref.switch_screen("accounts")
-
-        elif button_id == "btn-config":
-            if hasattr(self._app_ref, "action_switch_page"):
-                self._app_ref.action_switch_page("config")
-            else:
-                self._app_ref.switch_screen("config")
+        Args:
+            event: 键盘事件
+        """
+        # Tab键交给ContentArea处理（返回侧边栏）
+        # 方向键由表格自行处理
+        pass
 
     def refresh_data(self) -> None:
         """刷新统计数据和最近任务"""

@@ -2,11 +2,13 @@
 ECMWF Downloader TUI 导航侧边栏组件
 
 提供左侧导航菜单，支持页面切换和当前页面高亮显示。
+支持方向键导航（上下键切换页面，Enter键确认）。
 """
 
 from typing import Iterable
 
 from textual.containers import Vertical, Container
+from textual.events import Key
 from textual.reactive import reactive
 from textual.widgets import Button, Label
 
@@ -19,7 +21,8 @@ class NavigationSidebar(Vertical):
     - 显示5个导航按钮（首页/任务/下载/账号/配置）
     - 高亮当前选中页面（-active样式类 + 左侧指示条）
     - 响应点击事件，通知App切换页面
-    - 支持键盘快捷键（通过App.action）
+    - 支持键盘快捷键（h/t/d/a/c，通过App.action）
+    - 支持方向键导航（↑↓切换页面，Enter确认）
     - 显示底部提示信息
 
     样式特点：
@@ -29,6 +32,12 @@ class NavigationSidebar(Vertical):
     - 标题区域：30%主色背景 + 底部分隔线
     - 激活按钮：40%主色背景 + 左侧thick指示条
     - 悬停效果：15%主色背景柔和高亮
+
+    键盘操作：
+    - h/t/d/a/c：快捷键切换到对应页面
+    - ↑方向键：移动到上一个页面（循环）
+    - ↓方向键：移动到下一个页面（循环）
+    - Enter：确认选择当前页面
     """
 
     DEFAULT_CSS = """
@@ -158,12 +167,26 @@ class NavigationSidebar(Vertical):
         yield Container(id="nav-separator")
 
         # 底部提示区域
-        yield Label("按 q 退出", id="footer-label")
+        yield Label("↑↓页面 Tab↔切换焦点 q退出", id="footer-label")
 
     def on_mount(self) -> None:
         """组件挂载时初始化"""
         # 设置初始激活状态
         self._update_active_button()
+
+        # 让侧边栏容器本身可以聚焦
+        # 这样焦点就会在侧边栏整体和内容区域之间切换，而不是在按钮之间切换
+        self.can_focus = True
+
+        # 防止按钮单独获取焦点（通过监听焦点事件）
+        # 当按钮尝试获取焦点时，将焦点转发给侧边栏容器
+        for nav_item in self.NAV_ITEMS:
+            try:
+                button = self.query_one(f"#nav-{nav_item['id']}", Button)
+                # 设置按钮不可聚焦
+                button.can_focus = False
+            except Exception:
+                pass
 
     def watch_current_page(self, old_page: str, new_page: str) -> None:
         """监听current_page变化，更新按钮激活状态
@@ -213,3 +236,92 @@ class NavigationSidebar(Vertical):
                 self.log.warning(
                     f"App.action_switch_page() 方法未实现，无法切换到页面: {page_id}"
                 )
+
+    def on_key(self, event: Key) -> None:
+        """处理键盘事件，支持方向键导航和焦点切换
+
+        支持的按键：
+        - 上箭头（up）：移动到上一个页面
+        - 下箭头（down）：移动到下一个页面
+        - Tab：切换焦点到右侧内容区域
+
+        注意：Enter键不需要处理，方向键移动时页面已经跟着切换了
+
+        Args:
+            event: 键盘事件
+        """
+        # 获取当前页面在导航列表中的索引
+        current_index = -1
+        for i, nav_item in enumerate(self.NAV_ITEMS):
+            if nav_item["id"] == self.current_page:
+                current_index = i
+                break
+
+        # 根据按键处理
+        if event.key == "up":
+            # 上箭头：移动到上一个页面（循环）
+            if current_index > 0:
+                new_index = current_index - 1
+            else:
+                new_index = len(self.NAV_ITEMS) - 1  # 循环到最后一个
+            self._navigate_to_index(new_index)
+            event.stop()  # 阻止事件继续传播
+
+        elif event.key == "down":
+            # 下箭头：移动到下一个页面（循环）
+            if current_index < len(self.NAV_ITEMS) - 1:
+                new_index = current_index + 1
+            else:
+                new_index = 0  # 循环到第一个
+            self._navigate_to_index(new_index)
+            event.stop()  # 阻止事件继续传播
+
+        elif event.key == "tab":
+            # Tab键：切换焦点到右侧内容区域
+            # 阻止默认的Tab行为（在按钮间切换）
+            event.stop()
+            # 手动将焦点设置到内容区域
+            self._switch_focus_to_content()
+
+    def _navigate_to_index(self, index: int) -> None:
+        """导航到指定索引的页面
+
+        Args:
+            index: 页面索引
+        """
+        if 0 <= index < len(self.NAV_ITEMS):
+            page_id = self.NAV_ITEMS[index]["id"]
+            # 更新当前页面（会触发watch_current_page和页面切换）
+            self.current_page = page_id
+            # 通知App切换页面
+            if hasattr(self.app, "action_switch_page"):
+                self.app.action_switch_page(page_id)
+
+    def _switch_focus_to_content(self) -> None:
+        """切换焦点到右侧内容区域"""
+        try:
+            # 获取ContentArea
+            from src.ui.widgets.content_area import ContentArea
+            content_area = self.app.query_one("#main-content", ContentArea)
+
+            # 获取当前显示的内容Widget
+            current_widget = content_area.get_current_content()
+
+            if current_widget:
+                # 尝试聚焦到内容Widget的第一个可聚焦子元素
+                # 先尝试找Input、DataTable等可聚焦的组件
+                focusable = current_widget.query_one(
+                    "Input, DataTable, Button, TextArea", expect_type=None
+                )
+
+                if focusable:
+                    focusable.focus()
+                    self.log.info(f"焦点已切换到: {focusable.__class__.__name__}")
+                else:
+                    # 如果没有找到，就聚焦到内容Widget本身
+                    current_widget.focus()
+                    self.log.info("焦点已切换到内容区域")
+            else:
+                self.log.warning("没有可聚焦的内容区域")
+        except Exception as e:
+            self.log.warning(f"切换焦点到内容区域失败: {e}")

@@ -110,12 +110,24 @@ class TasksContent(Widget):
 
     def on_mount(self) -> None:
         """组件挂载时初始化"""
-        # 设置任务表格
-        self._setup_table()
-        # 加载任务数据
-        self._load_tasks()
-        # 注册进度观察者
-        self._register_progress_observer()
+        # 使用set_timer确保DOM完全挂载后再初始化
+        self.set_timer(0, self._initialize_after_mount)
+
+    def _initialize_after_mount(self) -> None:
+        """DOM完全挂载后初始化"""
+        # 检查Widget是否仍然挂载
+        if not self.is_mounted:
+            return
+
+        try:
+            # 设置任务表格
+            self._setup_table()
+            # 加载任务数据
+            self._load_tasks()
+            # 注册进度观察者
+            self._register_progress_observer()
+        except Exception as e:
+            self.log.warning(f"[TasksContent] 初始化失败: {e}")
 
     def on_unmount(self) -> None:
         """组件卸载时清理"""

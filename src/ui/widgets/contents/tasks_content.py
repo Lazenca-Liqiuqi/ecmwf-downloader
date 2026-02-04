@@ -29,10 +29,6 @@ class TasksContent(Widget):
     """
 
     CSS = """
-    #tasks-container {
-        padding: 1 1 1 1;
-    }
-
     #tasks-header {
         height: 3;
         margin-bottom: 1;
@@ -54,28 +50,11 @@ class TasksContent(Widget):
 
     #filter-container {
         height: 3;
-        margin: 0 3 1 3;
-        padding: 0 1;
-    }
-
-    #filter-container Button {
-        margin: 0 1;
-        padding: 0 1;
     }
 
     #tasks-table {
         height: 18;
         border: solid $panel;
-        margin: 0 3 0 3;
-    }
-
-    #actions-container {
-        margin: 0 3 0 3;
-    }
-
-    #actions-container Button {
-        margin: 0 1;
-        padding: 0 2;
     }
 
     #filter-container Button.-active {
@@ -104,14 +83,14 @@ class TasksContent(Widget):
     def compose(self) -> Iterable:
         """构建任务列表 UI"""
         # 主容器
-        with Container(id="tasks-container"):
+        with Container(id="tasks-container", classes="content-container"):
             # 标题和搜索区域
             with Horizontal(id="tasks-header"):
                 yield Label("任务列表", id="tasks-title")
                 yield Input(placeholder="搜索任务ID或文件名...", id="search-input")
 
             # 状态筛选区域
-            with Horizontal(id="filter-container"):
+            with Horizontal(id="filter-container", classes="section-compact"):
                 yield Button("全部", id="filter-all", variant="default")
                 yield Button("待下载", id="filter-pending", variant="default")
                 yield Button("下载中", id="filter-downloading", variant="default")
@@ -119,10 +98,11 @@ class TasksContent(Widget):
                 yield Button("失败", id="filter-failed", variant="default")
 
             # 任务表格
-            yield TaskTable(id="tasks-table")
+            with Container(id="tasks-table-wrapper", classes="table-section"):
+                yield TaskTable(id="tasks-table")
 
             # 操作按钮区域
-            with Horizontal(id="actions-container"):
+            with Horizontal(id="actions-container", classes="button-section"):
                 yield Button("重试", id="btn-retry", variant="default")
                 yield Button("取消", id="btn-cancel", variant="default")
                 yield Button("删除", id="btn-delete", variant="default")

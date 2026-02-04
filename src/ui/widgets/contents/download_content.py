@@ -28,22 +28,16 @@ class DownloadContent(Widget):
     """
 
     CSS = """
-    #download-container {
-        padding: 1 1 1 1;
-    }
-
     #download-title {
         text-align: left;
         text-style: bold;
         color: $accent;
         margin-top: 1;
         margin-bottom: 2;
-        margin-left: 2;
     }
 
     #progress-section {
         height: 8;
-        margin: 1 3 1 3;
         padding: 1 1;
     }
 
@@ -71,7 +65,6 @@ class DownloadContent(Widget):
 
     #active-tasks-section {
         height: 16;
-        margin: 1 3 1 3;
         padding: 0 1;
     }
 
@@ -85,18 +78,6 @@ class DownloadContent(Widget):
     #active-table {
         height: 1fr;
         border: solid $panel;
-    }
-
-    #control-section {
-        height: 3;
-        margin: 1 3 1 3;
-        padding: 0 1;
-    }
-
-    #control-section Button {
-        width: 1fr;
-        margin: 0 1;
-        padding: 0 1;
     }
     """
 
@@ -114,12 +95,12 @@ class DownloadContent(Widget):
     def compose(self) -> Iterable:
         """构建下载管理 UI"""
         # 主容器
-        with Container(id="download-container"):
+        with Container(id="download-container", classes="content-container"):
             # 标题
-            yield Label("下载管理", id="download-title")
+            yield Label("下载管理", id="download-title", classes="page-title")
 
             # 整体进度区域
-            with Vertical(id="progress-section"):
+            with Vertical(id="progress-section", classes="section-standard"):
                 yield Label("整体进度", id="progress-label")
                 yield ProgressBar(
                     total=100,
@@ -134,12 +115,12 @@ class DownloadContent(Widget):
                     yield Label("失败: 0", id="stat-failed")
 
             # 活动任务列表
-            with Vertical(id="active-tasks-section"):
+            with Vertical(id="active-tasks-section", classes="section-standard"):
                 yield Label("活动任务", id="active-label")
                 yield TaskTable(id="active-table")
 
             # 控制按钮区域
-            with Horizontal(id="control-section"):
+            with Horizontal(id="control-section", classes="button-section"):
                 yield Button("开始所有", id="btn-start-all", variant="default")
                 yield Button("暂停所有", id="btn-pause-all", variant="default")
                 yield Button("停止所有", id="btn-stop-all", variant="default")

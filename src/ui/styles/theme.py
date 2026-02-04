@@ -37,12 +37,64 @@ Footer {
 }
 
 /* ═══════════════════════════════════════════════════════════════
+   统一布局间距系统
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 主容器统一样式 */
+.content-container {
+    padding: 1 1 1 1;
+}
+
+/* 页面标题统一样式 */
+.page-title {
+    text-align: left;
+    text-style: bold;
+    color: $accent;
+    margin-top: 1;
+    margin-bottom: 2;
+}
+
+/* 标准区域间距 - 用于主要内容区域 */
+.section-standard {
+    margin: 1 3 1 3;
+    padding: 0 1;
+}
+
+/* 紧凑区域间距 - 用于需要节省空间的区域 */
+.section-compact {
+    margin: 0 3 0 3;
+    padding: 0 1;
+}
+
+/* 大区域间距 - 用于需要突出显示的区域 */
+.section-spacious {
+    margin: 2 3 2 3;
+    padding: 1 1;
+}
+
+/* 表格区域间距 */
+.table-section {
+    margin: 0 3 0 3;
+}
+
+/* 按钮区域间距 */
+.button-section {
+    height: 3;
+    margin: 0 3 0 3;
+    padding: 0 1;
+}
+
+/* 表单输入区域 */
+.form-section {
+    margin: 1 3 1 3;
+}
+
+/* ═══════════════════════════════════════════════════════════════
    首页容器 - 添加左边距
    ═══════════════════════════════════════════════════════════════ */
 
 #home-container {
-    padding: 1 1 1 4;
-    margin-left: 2;
+    padding: 1 1 1 1;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -105,20 +157,136 @@ Footer {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   快捷操作按钮区域 - 现代化按钮设计
+   统一按钮样式系统
    ═══════════════════════════════════════════════════════════════ */
 
+/* 按钮容器 */
 #actions-container {
     height: 4;
     margin: 2 3 2 5;
     padding: 0 1;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   全局按钮基础样式
+   ═══════════════════════════════════════════════════════════════ */
 Button {
     width: 1fr;
     margin: 0 1;
     padding: 0 2;
-    border: wide;
+    border: wide $panel;
+    background: $panel;
+    text-style: none;
+    color: $text;
+    text-align: center;
+}
+
+/* 按钮悬停效果 - 柔和高亮 */
+Button:hover {
+    background: $primary 20%;
+    border: wide $primary;
+    text-style: bold;
+    color: $text;
+}
+
+/* 按钮禁用状态 */
+Button:disabled {
+    background: $panel 50%;
+    border: wide $panel 50%;
+    text-style: none;
+    color: $text 50%;
+    opacity: 0.6;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   按钮变体样式（variant属性）
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Primary 变体 - 主要操作按钮 */
+Button.--primary {
+    background: $primary;
+    border: wide $primary;
+    text-style: bold;
+    color: $text;
+}
+
+Button.--primary:hover {
+    background: $primary 80%;
+    border: wide $primary 80%;
+}
+
+/* Success 变体 - 成功操作按钮 */
+Button.--success {
+    background: $success;
+    border: wide $success;
+    text-style: bold;
+    color: $background;
+}
+
+Button.--success:hover {
+    background: $success 80%;
+    border: wide $success 80%;
+}
+
+/* Warning 变体 - 警告操作按钮 */
+Button.--warning {
+    background: $warning;
+    border: wide $warning;
+    text-style: bold;
+    color: $background;
+}
+
+Button.--warning:hover {
+    background: $warning 80%;
+    border: wide $warning 80%;
+}
+
+/* Danger 变体 - 危险操作按钮 */
+Button.--danger {
+    background: $error;
+    border: wide $error;
+    text-style: bold;
+    color: $background;
+}
+
+Button.--danger:hover {
+    background: $error 80%;
+    border: wide $error 80%;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   按钮尺寸样式（通过CSS类）
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 小尺寸按钮 - 用于紧凑区域 */
+Button.btn-small {
+    margin: 0 1;
+    padding: 0 1;
+}
+
+/* 大尺寸按钮 - 用于主要操作 */
+Button.btn-large {
+    margin: 0 1;
+    padding: 0 3;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   交互反馈动画
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 输入框聚焦动画 */
+Input:focus {
+    border: wide $accent;
+    background: $background 95%;
+}
+
+/* 统计卡片悬停动画 */
+.stat-card {
+}
+
+.stat-card:hover {
+    border: thick $accent;
+    background: $primary 10%;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -141,17 +309,42 @@ Button {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   DataTable 通用样式 - 斑马纹和焦点
+   DataTable 通用样式 - 增强视觉呈现
    ═══════════════════════════════════════════════════════════════ */
 
 DataTable {
-    border: solid $panel;
+    border: thick $panel;
+    background: $background 90%;
 }
 
+/* 固定表头样式 */
+DataTable > Header {
+    background: $panel;
+    text-style: bold;
+    color: $accent;
+    border-bottom: thick $accent;
+    padding: 0 1;
+}
+
+/* 列标题悬停效果 */
+DataTable > Header:hover {
+    background: $panel 80%;
+}
+
+/* 数据行悬停效果 */
+DataTable > DataTableRow:hover {
+    background: $primary 15%;
+    text-style: bold;
+}
+
+/* 光标行（当前选中行） */
 DataTable > DataTableCursor {
     background: $primary 40%;
     text-style: bold;
+    border-left: thick $accent;
 }
+
+/* 注：DataTable内置斑马纹支持，通过self.zebra_stripes = True启用 */
 
 /* ═══════════════════════════════════════════════════════════════
    状态颜色 - 精心调配的语义化颜色
@@ -477,6 +670,12 @@ THEME_CONFIGS = {
         "description": "深色主题，青色强调，适合长时间使用的专业数据工具界面",
         "style": "dark",
         "primary_accent": "cyan",
+    },
+    "light": {
+        "name": "明亮简洁",
+        "description": "浅色主题，蓝色强调，适合明亮环境使用的清新界面",
+        "style": "light",
+        "primary_accent": "blue",
     },
 }
 

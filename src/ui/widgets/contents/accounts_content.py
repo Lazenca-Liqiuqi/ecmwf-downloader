@@ -26,10 +26,6 @@ class AccountsContent(Widget):
     """
 
     CSS = """
-    #accounts-container {
-        padding: 1 1 1 1;
-    }
-
     #accounts-title {
         text-align: left;
         text-style: bold;
@@ -40,24 +36,11 @@ class AccountsContent(Widget):
 
     #table-section {
         height: 20;
-        margin: 0 3 1 3;
     }
 
     #accounts-table {
         height: 1fr;
         border: solid $panel;
-    }
-
-    #actions-section {
-        height: 3;
-        margin: 0 3 0 3;
-        padding: 0 1;
-    }
-
-    #actions-section Button {
-        width: 1fr;
-        margin: 0 1;
-        padding: 0 1;
     }
     """
 
@@ -75,16 +58,16 @@ class AccountsContent(Widget):
     def compose(self) -> Iterable:
         """构建账号管理 UI"""
         # 主容器
-        with Container(id="accounts-container"):
+        with Container(id="accounts-container", classes="content-container"):
             # 标题
-            yield Label("账号管理", id="accounts-title")
+            yield Label("账号管理", id="accounts-title", classes="page-title")
 
             # 账号表格
-            with Vertical(id="table-section"):
+            with Vertical(id="table-section", classes="table-section"):
                 yield AccountTable(id="accounts-table")
 
             # 操作按钮区域
-            with Horizontal(id="actions-section"):
+            with Horizontal(id="actions-section", classes="button-section"):
                 yield Button("添加", id="btn-add", variant="default")
                 yield Button("编辑", id="btn-edit", variant="default")
                 yield Button("删除", id="btn-delete", variant="default")

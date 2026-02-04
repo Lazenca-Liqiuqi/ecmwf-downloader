@@ -24,22 +24,12 @@ class ConfigContent(Widget):
     """
 
     CSS = """
-    #config-container {
-        padding: 1 1 1 1;
-    }
-
     #config-title {
         text-align: left;
         text-style: bold;
         color: $accent;
         margin-top: 1;
         margin-bottom: 2;
-    }
-
-    #dataset-section,
-    #variables-section,
-    #output-section {
-        margin: 1 3 1 3;
     }
 
     #dataset-label,
@@ -57,7 +47,6 @@ class ConfigContent(Widget):
     #time-section,
     #spatial-section {
         height: 4;
-        margin: 0 3 1 3;
     }
 
     #years-container,
@@ -65,17 +54,6 @@ class ConfigContent(Widget):
     #area-container,
     #levels-container {
         width: 1fr;
-    }
-
-    #actions-section {
-        height: 3;
-        margin: 2 3 0 3;
-    }
-
-    #actions-section Button {
-        width: 1fr;
-        margin: 0 1;
-        padding: 0 2;
     }
     """
 
@@ -92,12 +70,12 @@ class ConfigContent(Widget):
     def compose(self) -> Iterable:
         """构建配置管理 UI"""
         # 主容器
-        with Container(id="config-container"):
+        with Container(id="config-container", classes="content-container"):
             # 标题
-            yield Label("创建下载任务", id="config-title")
+            yield Label("创建下载任务", id="config-title", classes="page-title")
 
             # 数据集配置
-            with Vertical(id="dataset-section"):
+            with Vertical(id="dataset-section", classes="form-section"):
                 yield Label("数据集类型", id="dataset-label")
                 yield Input(
                     placeholder="reanalysis-era5-pressure-levels",
@@ -106,7 +84,7 @@ class ConfigContent(Widget):
                 )
 
             # 变量配置
-            with Vertical(id="variables-section"):
+            with Vertical(id="variables-section", classes="form-section"):
                 yield Label("变量列表（逗号分隔）", id="variables-label")
                 yield Input(
                     placeholder="temperature,geopotential",
@@ -114,7 +92,7 @@ class ConfigContent(Widget):
                 )
 
             # 时间配置
-            with Horizontal(id="time-section"):
+            with Horizontal(id="time-section", classes="section-compact"):
                 with Vertical(id="years-container"):
                     yield Label("年份（逗号分隔）", id="years-label")
                     yield Input(placeholder="2020,2021", id="input-years")
@@ -124,7 +102,7 @@ class ConfigContent(Widget):
                     yield Input(placeholder="1,2,3", id="input-months")
 
             # 空间配置
-            with Horizontal(id="spatial-section"):
+            with Horizontal(id="spatial-section", classes="section-compact"):
                 with Vertical(id="area-container"):
                     yield Label("区域范围（N,W,S,E）", id="area-label")
                     yield Input(placeholder="90,-180,-90,180", id="input-area")
@@ -137,7 +115,7 @@ class ConfigContent(Widget):
                     )
 
             # 输出配置
-            with Vertical(id="output-section"):
+            with Vertical(id="output-section", classes="form-section"):
                 yield Label("输出目录", id="output-label")
                 yield Input(
                     placeholder="./data/downloads",
@@ -146,7 +124,7 @@ class ConfigContent(Widget):
                 )
 
             # 操作按钮
-            with Horizontal(id="actions-section"):
+            with Horizontal(id="actions-section", classes="button-section"):
                 yield Button("创建任务", id="btn-create", variant="default")
                 yield Button("清空", id="btn-clear", variant="default")
                 yield Button("重置", id="btn-reset", variant="default")

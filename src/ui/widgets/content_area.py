@@ -7,7 +7,7 @@ ECMWF Downloader TUI 内容区域组件
 from typing import Iterable, Optional
 
 from textual.containers import Container, Vertical
-from textual.widgets import Footer, Header
+from textual.widgets import Header
 
 
 class ContentArea(Vertical):
@@ -32,7 +32,6 @@ class ContentArea(Vertical):
     ContentArea > Container {
         height: 1fr;
         overflow-y: auto;
-        padding: 1;
     }
     """
 
@@ -51,7 +50,6 @@ class ContentArea(Vertical):
         with Container(id="main-content"):
             # 主内容容器，初始为空
             pass
-        yield Footer()
 
     def switch_content(self, content_widget: Vertical) -> None:
         """切换内容区域显示的Widget
@@ -62,22 +60,16 @@ class ContentArea(Vertical):
         # 获取主内容容器
         content_container = self.query_one("#main-content", Container)
 
-        # 如果已有内容Widget，先移除
-        if self._current_content_widget is not None:
-            try:
-                content_container.remove_child(self._current_content_widget)
-            except Exception:
-                # 如果移除失败（比如Widget已被销毁），忽略错误
-                self.log.warning("移除旧内容Widget失败，可能已被销毁")
+        # 移除所有现有的子Widget
+        for child in content_container.children:
+            child.remove()
 
         # 挂载新的内容Widget
         content_container.mount(content_widget)
         self._current_content_widget = content_widget
 
         # 记录日志
-        self.log.info(
-            f"内容区域已切换到: {content_widget.__class__.__name__}"
-        )
+        self.log.info(f"内容区域已切换到: {content_widget.__class__.__name__}")
 
     def clear_content(self) -> None:
         """清空内容区域

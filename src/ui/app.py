@@ -103,14 +103,11 @@ class ECMWFDownloaderApp(App):
 
         采用侧边栏布局：
         - 左侧：NavigationSidebar（导航菜单）
-        - 右侧：ContentArea（内容区域）
-        - 底部：Footer（状态栏）
+        - 右侧：ContentArea（内容区域，已包含Header和Footer）
         """
-        yield Header()
         with Horizontal():
             yield NavigationSidebar()
             yield ContentArea(id="main-content")
-        yield Footer()
 
     def on_mount(self) -> None:
         """应用挂载时的生命周期钩子
@@ -131,7 +128,11 @@ class ECMWFDownloaderApp(App):
             "accounts": AccountsContent(app=self),
             "config": ConfigContent(app=self),
         }
-        self.log.info("内容Widget已初始化")
+        self.log.info(f"内容Widget已初始化: {list(self._content_widgets.keys())}")
+
+        # 检查Widget是否可访问
+        for page_id, widget in self._content_widgets.items():
+            self.log.info(f"Widget {page_id}: {widget.__class__.__name__}, app={widget.app}")
 
         # 显示首页
         self.action_switch_page("home")

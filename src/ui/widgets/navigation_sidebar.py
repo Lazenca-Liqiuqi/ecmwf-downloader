@@ -43,29 +43,11 @@ class NavigationSidebar(Vertical):
         padding: 0;
     }
 
-    /* ═══════════════════════════════════════════════════════════════
-       标题区域 - Logo和应用名称
-       ═══════════════════════════════════════════════════════════════ */
-    #sidebar-header {
-        height: 5;
-        background: $primary 30%;
-        border-bottom: solid $accent;
-        padding: 1 1;
-        margin-bottom: 1;
-    }
-
-    #sidebar-logo {
-        text-align: center;
-        text-style: bold;
-        color: $accent;
-        margin-bottom: 0;
-    }
-
-    #sidebar-title {
-        text-align: center;
-        text-style: bold;
-        margin-top: 0;
-        color: $text;
+    /* 确保所有子元素Container都没有边框 */
+    NavigationSidebar > Container {
+        border: none;
+        padding: 0;
+        margin: 0;
     }
 
     /* ═══════════════════════════════════════════════════════════════
@@ -91,6 +73,11 @@ class NavigationSidebar(Vertical):
         color: $text 80%;
     }
 
+    /* 快捷键样式 - 第一个字符（快捷键）高亮显示 */
+    NavigationSidebar Button > #button-label {
+        text-style: bold;
+    }
+
     /* 悬停效果 - 柔和高亮 */
     NavigationSidebar Button:hover {
         background: $primary 15%;
@@ -98,18 +85,18 @@ class NavigationSidebar(Vertical):
         color: $text;
     }
 
-    /* 激活状态 - 左侧指示条 + 渐变背景 */
+    /* 激活状态 - 高亮背景 */
     NavigationSidebar Button.-active {
-        background: $primary 40%;
+        background: $primary 50%;
         text-style: bold;
         color: $accent;
-        border-left: thick $accent;
-        padding-left: 1;
+        border: solid $accent;
     }
 
     /* 激活状态悬停 - 增强效果 */
     NavigationSidebar Button.-active:hover {
-        background: $primary 50%;
+        background: $primary 60%;
+        border: solid $accent;
     }
 
     /* ═══════════════════════════════════════════════════════════════
@@ -139,11 +126,11 @@ class NavigationSidebar(Vertical):
 
     # 导航项配置
     NAV_ITEMS = [
-        {"id": "home", "label": "[H] 首页", "key": "h"},
-        {"id": "tasks", "label": "[T] 任务", "key": "t"},
-        {"id": "download", "label": "[D] 下载", "key": "d"},
-        {"id": "accounts", "label": "[A] 账号", "key": "a"},
-        {"id": "config", "label": "[C] 配置", "key": "c"},
+        {"id": "home", "label": "H 首页", "key": "h"},
+        {"id": "tasks", "label": "T 任务", "key": "t"},
+        {"id": "download", "label": "D 下载", "key": "d"},
+        {"id": "accounts", "label": "A 账号", "key": "a"},
+        {"id": "config", "label": "C 配置", "key": "c"},
     ]
 
     # 当前页面（reactive变量，会自动触发界面更新）
@@ -153,18 +140,10 @@ class NavigationSidebar(Vertical):
         """构建侧边栏UI
 
         结构：
-        - 侧边栏标题区域（Logo + 应用名称）
         - 导航按钮容器
         - 分隔线
         - 底部提示区域
         """
-        # 标题区域
-        yield Container(
-            Label("🌤️", id="sidebar-logo"),
-            Label("ECMWF", id="sidebar-title"),
-            id="sidebar-header",
-        )
-
         # 导航按钮容器
         with Container(id="nav-buttons-container"):
             for nav_item in self.NAV_ITEMS:
@@ -179,10 +158,7 @@ class NavigationSidebar(Vertical):
         yield Container(id="nav-separator")
 
         # 底部提示区域
-        yield Container(
-            Label("按 [q] 退出", id="footer-label"),
-            id="sidebar-footer",
-        )
+        yield Label("按 q 退出", id="footer-label")
 
     def on_mount(self) -> None:
         """组件挂载时初始化"""

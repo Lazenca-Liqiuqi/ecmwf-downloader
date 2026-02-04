@@ -33,10 +33,6 @@ class HomeContent(Widget):
 
     # 首页专用样式（与全局样式合并）
     CSS = """
-    #home-container {
-        padding: 1 1 1 1;
-    }
-
     #app-title {
         text-align: center;
         text-style: bold;
@@ -54,7 +50,7 @@ class HomeContent(Widget):
 
     #stats-container {
         height: 12;
-        margin: 2 5 2 5;
+        margin: 2 3 2 3;
         padding: 0 1;
     }
 
@@ -94,26 +90,17 @@ class HomeContent(Widget):
         padding: 0 1;
     }
 
-    #actions-container Button {
-        width: 1fr;
-        margin: 0 1;
-        padding: 0 2;
-        border: wide;
-    }
-
     #recent-title {
         text-align: left;
         text-style: bold;
         margin-top: 2;
         margin-bottom: 1;
-        margin-left: 2;
         color: $accent;
     }
 
     #recent-table {
         height: 16;
         border: solid $panel;
-        margin: 0 3 0 3;
     }
     """
 
@@ -131,7 +118,7 @@ class HomeContent(Widget):
     def compose(self) -> Iterable:
         """构建首页 UI"""
         # 主容器
-        with Container(id="home-container"):
+        with Container(id="home-container", classes="content-container"):
             # 标题区域
             yield Label("ECMWF Downloader", id="app-title")
             yield Label("欧洲中期天气预报中心数据下载工具", id="app-subtitle")

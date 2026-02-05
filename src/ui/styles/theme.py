@@ -160,8 +160,9 @@ Footer {
    统一按钮样式系统
    ═══════════════════════════════════════════════════════════════ */
 
-/* 按钮容器 */
-#actions-container {
+/* 按钮容器（旧版 Screen 使用；避免影响新版 *Content） */
+HomeScreen #actions-container,
+TasksScreen #actions-container {
     height: 4;
     margin: 2 3 2 5;
     padding: 0 1;
@@ -411,20 +412,20 @@ DataTable > DataTableCursor {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   任务列表屏幕样式
+   任务列表屏幕样式（仅 TasksScreen 生效，避免污染新版 TasksContent）
    ═══════════════════════════════════════════════════════════════ */
 
-#tasks-container {
+TasksScreen #tasks-container {
     padding: 1 1 1 4;
     margin-left: 2;
 }
 
-#tasks-header {
+TasksScreen #tasks-header {
     height: 3;
     margin-bottom: 1;
 }
 
-#tasks-title {
+TasksScreen #tasks-title {
     text-align: left;
     text-style: bold;
     color: $accent;
@@ -433,36 +434,36 @@ DataTable > DataTableCursor {
     margin-left: 2;
 }
 
-#search-input {
+TasksScreen #search-input {
     width: 1fr;
     margin: 0 1 0 0;
     border: wide;
 }
 
-#filter-container {
+TasksScreen #filter-container {
     height: 3;
     margin: 0 3 1 5;
     padding: 0 1;
 }
 
-#filter-container Button {
+TasksScreen #filter-container Button {
     margin: 0 1;
     padding: 0 1;
 }
 
-#tasks-table {
+TasksScreen #tasks-table {
     height: 18;
     border: solid $panel;
     margin: 0 3 0 5;
 }
 
-#actions-container Button {
+TasksScreen #actions-container Button {
     margin: 0 1;
     padding: 0 2;
 }
 
 /* 任务列表操作按钮容器 */
-#actions-container {
+TasksScreen #actions-container {
     margin: 0 3 0 5;
 }
 
@@ -512,6 +513,47 @@ TASKS_CSS = """
 /* 搜索框聚焦 */
 #search-input:focus {
     border: solid $accent;
+}
+"""
+
+
+# =============================================================================
+# 新版内容组件样式（Widget Content）
+# =============================================================================
+CONTENT_CSS = """
+/* TasksContent：保证筛选/操作按钮与表格左右对齐，占满内容区 */
+TasksContent #filter-container,
+TasksContent #actions-container,
+TasksContent #tasks-table {
+    width: 1fr;
+    margin: 1 0;
+}
+
+TasksContent #actions-container {
+    height: auto;
+}
+
+TasksContent #filter-container,
+TasksContent #actions-container {
+    padding: 0;
+}
+
+TasksContent #filter-container Button,
+TasksContent #actions-container Button {
+    margin: 0;
+}
+
+/* 用左侧 margin 实现按钮间距，同时保证左右边缘对齐表格 */
+TasksContent #filter-container #filter-pending,
+TasksContent #filter-container #filter-downloading,
+TasksContent #filter-container #filter-completed,
+TasksContent #filter-container #filter-failed {
+    margin: 0 0 0 1;
+}
+
+TasksContent #actions-container Button.-middle,
+TasksContent #actions-container Button.-last {
+    margin: 0 0 0 1;
 }
 """
 
@@ -636,7 +678,7 @@ def get_global_styles() -> str:
     Returns:
         str: 全局 CSS 样式字符串
     """
-    return GLOBAL_CSS
+    return GLOBAL_CSS + CONTENT_CSS
 
 
 def get_home_styles() -> str:

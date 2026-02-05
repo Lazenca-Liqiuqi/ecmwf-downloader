@@ -212,7 +212,7 @@ class NavigationSidebar(Vertical):
             # 如果查询失败（页面ID无效），忽略错误
             pass
 
-    async def on_button_pressed(self, event: Button.Pressed) -> None:
+    def on_button_pressed(self, event: Button.Pressed) -> None:
         """按钮点击事件处理
 
         Args:
@@ -230,14 +230,14 @@ class NavigationSidebar(Vertical):
             # 通知App切换页面
             # 注意：App需要实现action_switch_page方法
             if hasattr(self.app, "action_switch_page"):
-                await self.app.action_switch_page(page_id)
+                self.app.action_switch_page(page_id)
             else:
                 # 如果App还没有实现switch_page，记录警告
                 self.log.warning(
                     f"App.action_switch_page() 方法未实现，无法切换到页面: {page_id}"
                 )
 
-    async def on_key(self, event: Key) -> None:
+    def on_key(self, event: Key) -> None:
         """处理键盘事件，支持方向键导航和焦点切换
 
         支持的按键：
@@ -264,7 +264,7 @@ class NavigationSidebar(Vertical):
                 new_index = current_index - 1
             else:
                 new_index = len(self.NAV_ITEMS) - 1  # 循环到最后一个
-            await self._navigate_to_index(new_index)
+            self._navigate_to_index(new_index)
             event.stop()  # 阻止事件继续传播
 
         elif event.key == "down":
@@ -273,7 +273,7 @@ class NavigationSidebar(Vertical):
                 new_index = current_index + 1
             else:
                 new_index = 0  # 循环到第一个
-            await self._navigate_to_index(new_index)
+            self._navigate_to_index(new_index)
             event.stop()  # 阻止事件继续传播
 
         elif event.key == "tab":
@@ -283,7 +283,7 @@ class NavigationSidebar(Vertical):
             # 手动将焦点设置到内容区域
             self._switch_focus_to_content()
 
-    async def _navigate_to_index(self, index: int) -> None:
+    def _navigate_to_index(self, index: int) -> None:
         """导航到指定索引的页面
 
         Args:
@@ -295,7 +295,7 @@ class NavigationSidebar(Vertical):
             self.current_page = page_id
             # 通知App切换页面
             if hasattr(self.app, "action_switch_page"):
-                await self.app.action_switch_page(page_id)
+                self.app.action_switch_page(page_id)
 
     def _switch_focus_to_content(self) -> None:
         """切换焦点到右侧内容区域"""

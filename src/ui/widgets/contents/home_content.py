@@ -281,6 +281,14 @@ class HomeContent(Widget):
     def _update_account_stats(self) -> None:
         """更新账号池统计卡片"""
         try:
+            # 账号池采用延迟加载：首页默认不触发初始化，避免破坏 lazy-loading 语义与测试预期。
+            if getattr(self._app_ref, "_account_pool", None) is None:
+                self._update_stat_card("account-total", "总账号: -")
+                self._update_stat_card("account-busy", "正忙: -")
+                self._update_stat_card("account-active", "空闲: -")
+                self._update_stat_card("account-failed", "失效: -")
+                return
+
             # 获取账号池统计
             usage = self._app_ref.account_pool.get_usage_summary()
 

@@ -7,6 +7,8 @@ ECMWF Downloader TUI 内容区域组件
 
 from typing import Iterable, Optional
 
+import asyncio
+
 from textual.containers import Container, Vertical
 from textual.events import Key
 from textual.widget import Widget
@@ -48,6 +50,8 @@ class ContentArea(Vertical):
         """
         super().__init__(**kwargs)
         self._current_content_widget: Optional[Widget] = None
+        self._switch_serial = 0
+        self._switch_task: Optional[asyncio.Task] = None
 
     def compose(self) -> Iterable:
         """构建内容区域UI"""
@@ -56,49 +60,73 @@ class ContentArea(Vertical):
             # 主内容容器，初始为空
             pass
 
-    async def switch_content(self, content_widget: Widget) -> None:
-        """切换内容区域显示的Widget
+    def switch_content(self, content_widget: Widget) -> None:
+        """切换内容区域显示的 Widget（同步入口）
 
-        切换后，焦点会保留在侧边栏，用户需要按Tab键才能聚焦到内容区域。
-
-        Args:
-            content_widget: 要显示的内容Widget
+        为兼容测试与同步调用方，此方法不返回 coroutine；实际的 mount/remove
+        在后台异步执行（Textual 7+ 需要 await）。
         """
-        # 获取主内容容器
-        content_container = self.query_one("#content-container", Container)
-
-        # 移除所有现有的子Widget（Textual 7+ 需要 await）
-        await content_container.remove_children()
-
-        # 挂载新的内容Widget（Textual 7+ 需要 await）
-        await content_container.mount(content_widget)
         self._current_content_widget = content_widget
+        self._switch_serial += 1
+        serial = self._switch_serial
 
-        # 记录日志
-        self.log.info(f"内容区域已切换到: {content_widget.__class__.__name__}")
+        def _schedule() -> None:
+            if self._switch_task is not None and not self._switch_task.done():
+                self._switch_task.cancel()
+            self._switch_task = asyncio.create_task(self._apply_content(serial))
+
+        self.call_after_refresh(_schedule)
+
+    def clear_content(self) -> None:
+        """清空内容区域（同步入口）"""
+        if self._current_content_widget is None:
+            return
+
+        self._current_content_widget = None
+        self._switch_serial += 1
+        serial = self._switch_serial
+
+        def _schedule() -> None:
+            if self._switch_task is not None and not self._switch_task.done():
+                self._switch_task.cancel()
+            self._switch_task = asyncio.create_task(self._apply_content(serial))
+
+        self.call_after_refresh(_schedule)
+
+    async def _apply_content(self, serial: int) -> None:
+        """根据当前状态应用内容（Textual 7+ 需要 await mount/remove）"""
+        if serial != self._switch_serial:
+            return
+
+        try:
+            content_container = self.query_one("#content-container", Container)
+        except Exception:
+            return
+
+        try:
+            await content_container.remove_children()
+
+            if serial != self._switch_serial:
+                return
+
+            if self._current_content_widget is not None:
+                await content_container.mount(self._current_content_widget)
+                self.log.info(
+                    f"内容区域已切换到: {self._current_content_widget.__class__.__name__}"
+                )
+            else:
+                self.log.info("内容区域已清空")
+        except Exception as e:
+            self.log.warning(f"应用内容区域变更失败: {e}")
+            return
 
         # 将焦点设置回侧边栏（NavigationSidebar）
-        # 这样用户必须按Tab键才能聚焦到内容区域
         try:
             sidebar = self.app.query_one("NavigationSidebar")
             sidebar.focus()
             self.log.debug("焦点已返回到侧边栏")
         except Exception as e:
             self.log.warning(f"设置焦点到侧边栏失败: {e}")
-
-    async def clear_content(self) -> None:
-        """清空内容区域
-
-        移除当前显示的内容Widget，将内容区域重置为空状态。
-        """
-        if self._current_content_widget is not None:
-            content_container = self.query_one("#content-container", Container)
-            try:
-                await content_container.remove_children([self._current_content_widget])
-                self._current_content_widget = None
-                self.log.info("内容区域已清空")
-            except Exception as e:
-                self.log.warning(f"清空内容区域失败: {e}")
 
     def get_current_content(self) -> Optional[Widget]:
         """获取当前显示的内容Widget

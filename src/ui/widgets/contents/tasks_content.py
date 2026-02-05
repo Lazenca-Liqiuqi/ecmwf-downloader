@@ -1,17 +1,18 @@
 """
 ECMWF Downloader TUI 任务列表内容组件
 
-显示所有下载任务，支持筛选、搜索和操作。
+显示所有下载任务，支持状态筛选和任务操作。
 这是从TasksScreen迁移而来的Widget版本。
 支持方向键操作：表格用方向键移动，Enter键选中行/触发按钮。
 """
 
 from typing import TYPE_CHECKING, Iterable
 
-from textual.containers import Container, Horizontal, Vertical
-from textual.events import Key
+from textual.containers import Horizontal, Vertical
+from textual.css.query import NoMatches
+from textual.events import Key, Resize
 from textual.widget import Widget
-from textual.widgets import Button, Input, Label
+from textual.widgets import Button, Label
 
 from src.core.progress import TaskStatus
 from src.ui.widgets.task_table import TaskTable
@@ -25,38 +26,44 @@ class TasksContent(Widget):
 
     显示：
     - 所有任务的表格列表
-    - 状态筛选按钮
-    - 搜索框
+    - 状态筛选按钮（全部/待下载/下载中/已完成/失败）
     - 操作按钮（重试、取消、删除）
     """
 
     DEFAULT_CSS = """
-    #tasks-header {
-        height: 3;
-        margin-bottom: 1;
+    TasksContent {
+        width: 1fr;
+        height: 1fr;
     }
 
+    #tasks-container {
+        width: 1fr;
+        height: 1fr;
+        overflow-y: auto;
+    }
+
+    /* 标题样式 */
     #tasks-title {
         text-align: left;
         text-style: bold;
         color: $accent;
-        padding: 0 1;
-        min-width: 20;
+        margin-bottom: 1;
     }
 
-    #search-input {
-        width: 1fr;
-        margin: 0 1 0 0;
-        border: wide;
-    }
-
+    /* 筛选区域 - 五等分布局 */
     #filter-container {
-        height: 3;
+        width: 1fr;
+        height: auto;
+        margin: 1 0;
     }
 
-    #tasks-table {
-        height: 18;
-        border: solid $panel;
+    #filter-container Button {
+        width: 1fr;
+        margin: 0 0 0 0;
+    }
+
+    #filter-container Button:last-child {
+        margin-left: 1;
     }
 
     #filter-container Button.-active {
@@ -65,8 +72,28 @@ class TasksContent(Widget):
         color: $accent;
     }
 
-    #search-input:focus {
-        border: solid $accent;
+    /* 任务表格 - 占满剩余空间 */
+    #tasks-table {
+        width: 1fr;
+        height: 1fr;
+        border: solid $panel;
+        margin: 1 0 3 0;
+    }
+
+    /* 操作按钮区域 */
+    #actions-container {
+        width: 1fr;
+        height: auto;
+    }
+
+    #actions-container Button {
+        width: 1fr;
+        margin: 0 0 0 0;
+    }
+
+    #actions-container Button.-middle,
+    #actions-container Button.-last {
+        margin-left: 1;
     }
     """
 
@@ -85,14 +112,12 @@ class TasksContent(Widget):
     def compose(self) -> Iterable:
         """构建任务列表 UI"""
         # 主容器
-        with Container(id="tasks-container", classes="content-container"):
-            # 标题和搜索区域
-            with Horizontal(id="tasks-header"):
-                yield Label("任务列表", id="tasks-title")
-                yield Input(placeholder="搜索任务ID或文件名...", id="search-input")
+        with Vertical(id="tasks-container", classes="content-container"):
+            # 标题
+            yield Label("任务列表", id="tasks-title")
 
-            # 状态筛选区域
-            with Horizontal(id="filter-container", classes="section-compact"):
+            # 状态筛选区域（五等分）
+            with Horizontal(id="filter-container"):
                 yield Button("全部", id="filter-all", variant="default")
                 yield Button("待下载", id="filter-pending", variant="default")
                 yield Button("下载中", id="filter-downloading", variant="default")
@@ -100,20 +125,21 @@ class TasksContent(Widget):
                 yield Button("失败", id="filter-failed", variant="default")
 
             # 任务表格
-            with Container(id="tasks-table-wrapper", classes="table-section"):
-                yield TaskTable(id="tasks-table")
+            yield TaskTable(id="tasks-table")
 
-            # 操作按钮区域
-            with Horizontal(id="actions-container", classes="button-section"):
+            # 操作按钮区域（三个按钮）
+            with Horizontal(id="actions-container"):
                 yield Button("重试", id="btn-retry", variant="default")
-                yield Button("取消", id="btn-cancel", variant="default")
-                yield Button("删除", id="btn-delete", variant="default")
-                yield Button("刷新", id="btn-refresh", variant="default")
+                yield Button("取消", id="btn-cancel", variant="default", classes="-middle")
+                yield Button("删除", id="btn-delete", variant="default", classes="-last")
 
     def on_mount(self) -> None:
-        """组件挂载时初始化"""
-        # 等首帧渲染完成后再初始化，确保DOM可查询（Textual 7+ 不支持 interval=0 的 timer）
+        """组件挂载后初始化（延后到首帧渲染完成，确保可获得正确尺寸）"""
         self.call_after_refresh(self._initialize_after_mount)
+
+    def on_resize(self, event: Resize) -> None:
+        """窗口尺寸变化时，保持表格列宽占满可用空间"""
+        self._resize_table_columns()
 
     def _initialize_after_mount(self) -> None:
         """DOM完全挂载后初始化"""
@@ -124,6 +150,8 @@ class TasksContent(Widget):
         try:
             # 设置任务表格
             self._setup_table()
+            # 等布局完成后再按窗口宽度调整列宽
+            self.call_after_refresh(self._resize_table_columns)
             # 加载任务数据
             self._load_tasks()
             # 注册进度观察者
@@ -138,15 +166,25 @@ class TasksContent(Widget):
 
     def _setup_table(self) -> None:
         """设置任务表格列"""
-        # TaskTable 组件会在 on_mount 时自动初始化列
-        pass
+        table = self.query_one("#tasks-table", TaskTable)
+        table.cursor_type = "row"
+        table.zebra_stripes = True
+        table.clear(columns=True)
+        # 显式给出 width，避免 DataTable 进入 auto_width 模式（否则后续动态宽度会被忽略）
+        # TaskTable有5列：任务ID、文件名、状态、进度、创建时间
+        # 注意：TaskTable.update_row 当前使用列名（如“状态”“进度”）作为 column_key。
+        # 这里不要传 key=，避免列 key 与列名不一致导致 update_cell 失败。
+        table.add_column("任务ID", width=20)
+        table.add_column("文件名", width=30)
+        table.add_column("状态", width=8)
+        table.add_column("进度", width=8)
+        table.add_column("创建时间", width=19)
 
-    def _load_tasks(self, status_filter: str = "all", search_text: str = "") -> None:
+    def _load_tasks(self, status_filter: str = "all") -> None:
         """加载任务数据到表格
 
         Args:
             status_filter: 状态筛选（all/pending/downloading/completed/failed）
-            search_text: 搜索文本
         """
         table = self.query_one("#tasks-table", TaskTable)
 
@@ -163,16 +201,6 @@ class TasksContent(Widget):
             tasks = self._app_ref.progress_manager.get_tasks_by_status(
                 status_map.get(status_filter, TaskStatus.PENDING)
             )
-
-        # 应用搜索过滤
-        if search_text:
-            search_lower = search_text.lower()
-            tasks = [
-                t
-                for t in tasks
-                if search_lower in t.task_id.lower()
-                or search_lower in t.filename.lower()
-            ]
 
         # 按创建时间降序排序
         tasks = sorted(tasks, key=lambda t: t.created_at, reverse=True)
@@ -198,16 +226,63 @@ class TasksContent(Widget):
         elif button_id == "btn-delete":
             self._handle_delete()
 
-        elif button_id == "btn-refresh":
-            self._handle_refresh()
+    def _resize_table_columns(self) -> None:
+        """按当前表格宽度动态调整列宽，尽量占满可用空间"""
+        try:
+            table = self.query_one("#tasks-table", TaskTable)
+        except NoMatches:
+            return
 
-    def on_input_changed(self, event: Input.Changed) -> None:
-        """搜索框变化事件"""
-        if event.input.id == "search-input":
-            search_text = event.value
-            self._load_tasks(
-                status_filter=self._current_filter, search_text=search_text
-            )
+        columns = list(table.ordered_columns)
+        if len(columns) < 5:
+            return
+
+        table_width = table.size.width
+        if table_width <= 0:
+            return
+
+        # 估算可用宽度：减去左右边框与列分隔符（近似值，避免溢出）
+        interior_width = max(0, table_width - 2 - (len(columns) - 1))
+
+        # 更偏向“前两列更宽、状态更窄”的分配：
+        # - 状态列尽量窄（6~8）
+        # - 进度列较窄（7~9）
+        # - 创建时间尽量保持可读（17~19）
+        # - 任务ID适中偏宽（20~44）
+        # - 文件名吃掉剩余
+        status_width = max(6, min(8, int(interior_width * 0.06)))
+        progress_width = max(7, min(9, int(interior_width * 0.07)))
+        time_width = max(17, min(19, int(interior_width * 0.16)))
+        task_id_width = max(20, min(44, int(interior_width * 0.30)))
+        filename_width = max(
+            22,
+            interior_width
+            - task_id_width
+            - status_width
+            - progress_width
+            - time_width,
+        )
+
+        # 如果空间太窄，优先压缩任务ID列给文件名列
+        min_filename = 22
+        if filename_width < min_filename:
+            shortage = min_filename - filename_width
+            task_id_width = max(18, task_id_width - shortage)
+            filename_width = max(min_filename, interior_width - task_id_width - status_width - progress_width - time_width)
+
+        # 设置列宽（按添加顺序：任务ID、文件名、状态、进度、创建时间）
+        columns[0].auto_width = False
+        columns[0].width = task_id_width
+        columns[1].auto_width = False
+        columns[1].width = filename_width
+        columns[2].auto_width = False
+        columns[2].width = status_width
+        columns[3].auto_width = False
+        columns[3].width = progress_width
+        columns[4].auto_width = False
+        columns[4].width = time_width
+
+        table.refresh(layout=True)
 
     def _handle_filter(self, filter_type: str) -> None:
         """处理状态筛选
@@ -232,10 +307,7 @@ class TasksContent(Widget):
                 button.variant = "default"
 
         # 重新加载任务
-        search_input = self.query_one("#search-input", Input)
-        self._load_tasks(
-            status_filter=filter_type, search_text=search_input.value
-        )
+        self._load_tasks(status_filter=filter_type)
 
     def _handle_retry(self) -> None:
         """处理重试操作"""
@@ -282,27 +354,13 @@ class TasksContent(Widget):
         if success:
             self.notify(f"任务 {task_id} 已删除", severity="success")
             # 重新加载任务列表
-            self._load_tasks(
-                status_filter=self._current_filter,
-                search_text=self.query_one("#search-input", Input).value,
-            )
+            self._load_tasks(status_filter=self._current_filter)
         else:
             self.notify(f"删除任务 {task_id} 失败", severity="error")
 
-    def _handle_refresh(self) -> None:
-        """处理刷新操作"""
-        search_input = self.query_one("#search-input", Input)
-        self._load_tasks(
-            status_filter=self._current_filter, search_text=search_input.value
-        )
-        self.notify("任务列表已刷新", severity="information")
-
     def refresh_data(self) -> None:
         """刷新任务列表数据"""
-        search_input = self.query_one("#search-input", Input)
-        self._load_tasks(
-            status_filter=self._current_filter, search_text=search_input.value
-        )
+        self._load_tasks(status_filter=self._current_filter)
 
     def _register_progress_observer(self) -> None:
         """注册进度管理器观察者"""

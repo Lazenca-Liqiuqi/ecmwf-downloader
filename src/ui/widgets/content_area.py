@@ -9,6 +9,7 @@ from typing import Iterable, Optional
 
 from textual.containers import Container, Vertical
 from textual.events import Key
+from textual.widget import Widget
 from textual.widgets import Header
 
 
@@ -28,10 +29,12 @@ class ContentArea(Vertical):
 
     DEFAULT_CSS = """
     ContentArea {
+        width: 1fr;
         height: 100%;
     }
 
     ContentArea > Container {
+        width: 1fr;
         height: 1fr;
         overflow-y: auto;
     }
@@ -44,16 +47,16 @@ class ContentArea(Vertical):
             **kwargs: 传递给父类的参数
         """
         super().__init__(**kwargs)
-        self._current_content_widget: Optional[Vertical] = None
+        self._current_content_widget: Optional[Widget] = None
 
     def compose(self) -> Iterable:
         """构建内容区域UI"""
         yield Header()
-        with Container(id="main-content"):
+        with Container(id="content-container"):
             # 主内容容器，初始为空
             pass
 
-    def switch_content(self, content_widget: Vertical) -> None:
+    async def switch_content(self, content_widget: Widget) -> None:
         """切换内容区域显示的Widget
 
         切换后，焦点会保留在侧边栏，用户需要按Tab键才能聚焦到内容区域。
@@ -62,14 +65,13 @@ class ContentArea(Vertical):
             content_widget: 要显示的内容Widget
         """
         # 获取主内容容器
-        content_container = self.query_one("#main-content", Container)
+        content_container = self.query_one("#content-container", Container)
 
-        # 移除所有现有的子Widget
-        for child in content_container.children:
-            child.remove()
+        # 移除所有现有的子Widget（Textual 7+ 需要 await）
+        await content_container.remove_children()
 
-        # 挂载新的内容Widget
-        content_container.mount(content_widget)
+        # 挂载新的内容Widget（Textual 7+ 需要 await）
+        await content_container.mount(content_widget)
         self._current_content_widget = content_widget
 
         # 记录日志
@@ -84,25 +86,25 @@ class ContentArea(Vertical):
         except Exception as e:
             self.log.warning(f"设置焦点到侧边栏失败: {e}")
 
-    def clear_content(self) -> None:
+    async def clear_content(self) -> None:
         """清空内容区域
 
         移除当前显示的内容Widget，将内容区域重置为空状态。
         """
         if self._current_content_widget is not None:
-            content_container = self.query_one("#main-content", Container)
+            content_container = self.query_one("#content-container", Container)
             try:
-                content_container.remove_child(self._current_content_widget)
+                await content_container.remove_children([self._current_content_widget])
                 self._current_content_widget = None
                 self.log.info("内容区域已清空")
             except Exception as e:
                 self.log.warning(f"清空内容区域失败: {e}")
 
-    def get_current_content(self) -> Optional[Vertical]:
+    def get_current_content(self) -> Optional[Widget]:
         """获取当前显示的内容Widget
 
         Returns:
-            Optional[Vertical]: 当前内容Widget，如果没有则返回None
+            Optional[Widget]: 当前内容Widget，如果没有则返回None
         """
         return self._current_content_widget
 

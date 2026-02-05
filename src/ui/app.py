@@ -110,7 +110,7 @@ class ECMWFDownloaderApp(App):
             yield NavigationSidebar()
             yield ContentArea(id="main-content")
 
-    def on_mount(self) -> None:
+    async def on_mount(self) -> None:
         """应用挂载时的生命周期钩子
 
         在应用启动后、显示第一个屏幕前调用。
@@ -136,7 +136,7 @@ class ECMWFDownloaderApp(App):
             self.log.info(f"Widget {page_id}: {widget.__class__.__name__}, app={widget.app}")
 
         # 显示首页
-        self.action_switch_page("home")
+        await self.action_switch_page("home")
 
         # 设置初始焦点在侧边栏
         try:
@@ -154,10 +154,10 @@ class ECMWFDownloaderApp(App):
             timeout=5,
         )
 
-    def action_switch_page(self, page_id: str) -> None:
-        """切换当前显示的页面
+    async def action_switch_page(self, page_id: str) -> None:
+        """切换当前显示的页面（异步）
 
-        这是Textual的action方法，可以通过BINDINGS或组件调用。
+        Textual 7+ 的 mount/remove 操作需要 await，因此页面切换改为异步。
 
         Args:
             page_id: 页面ID（home/tasks/download/accounts/config）
@@ -178,31 +178,31 @@ class ECMWFDownloaderApp(App):
         try:
             content_area = self.query_one("#main-content", ContentArea)
             content_widget = self._content_widgets[page_id]
-            content_area.switch_content(content_widget)
+            await content_area.switch_content(content_widget)
             self.log.info(f"页面已切换到: {page_id}")
         except Exception as e:
             self.log.error(f"切换页面失败: {e}")
 
     # 专门的action方法供快捷键调用（Textual要求BINDINGS中的action必须是方法名）
-    def action_go_home(self) -> None:
+    async def action_go_home(self) -> None:
         """快捷键h：切换到首页"""
-        self.action_switch_page("home")
+        await self.action_switch_page("home")
 
-    def action_go_tasks(self) -> None:
+    async def action_go_tasks(self) -> None:
         """快捷键t：切换到任务页"""
-        self.action_switch_page("tasks")
+        await self.action_switch_page("tasks")
 
-    def action_go_download(self) -> None:
+    async def action_go_download(self) -> None:
         """快捷键d：切换到下载页"""
-        self.action_switch_page("download")
+        await self.action_switch_page("download")
 
-    def action_go_accounts(self) -> None:
+    async def action_go_accounts(self) -> None:
         """快捷键a：切换到账号页"""
-        self.action_switch_page("accounts")
+        await self.action_switch_page("accounts")
 
-    def action_go_config(self) -> None:
+    async def action_go_config(self) -> None:
         """快捷键c：切换到配置页"""
-        self.action_switch_page("config")
+        await self.action_switch_page("config")
 
     @property
     def account_pool(self) -> "AccountPool":

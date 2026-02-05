@@ -30,7 +30,7 @@ class TasksContent(Widget):
     - 操作按钮（重试、取消、删除）
     """
 
-    CSS = """
+    DEFAULT_CSS = """
     #tasks-header {
         height: 3;
         margin-bottom: 1;
@@ -112,8 +112,8 @@ class TasksContent(Widget):
 
     def on_mount(self) -> None:
         """组件挂载时初始化"""
-        # 使用set_timer确保DOM完全挂载后再初始化
-        self.set_timer(0, self._initialize_after_mount)
+        # 等首帧渲染完成后再初始化，确保DOM可查询（Textual 7+ 不支持 interval=0 的 timer）
+        self.call_after_refresh(self._initialize_after_mount)
 
     def _initialize_after_mount(self) -> None:
         """DOM完全挂载后初始化"""

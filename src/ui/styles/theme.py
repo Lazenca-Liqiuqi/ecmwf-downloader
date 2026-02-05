@@ -126,7 +126,7 @@ Footer {
     padding: 0 1;
 }
 
-.stat-card {
+#stats-container .stat-card {
     width: 25%;
     height: 100%;
     border: solid $accent;
@@ -134,11 +134,11 @@ Footer {
     margin: 0 0;
 }
 
-.stat-card:last-child {
+#stats-container .stat-card:last-child {
     margin-right: 0;
 }
 
-.stat-card:hover {
+#stats-container .stat-card:hover {
     border: solid $primary;
 }
 
@@ -280,11 +280,8 @@ Input:focus {
     background: $background 95%;
 }
 
-/* 统计卡片悬停动画 */
-.stat-card {
-}
-
-.stat-card:hover {
+/* 统计卡片悬停动画（旧版 HomeScreen 统计卡片） */
+#stats-container .stat-card:hover {
     border: thick $accent;
     background: $primary 10%;
 }
@@ -293,7 +290,7 @@ Input:focus {
    最近任务区域
    ═══════════════════════════════════════════════════════════════ */
 
-#recent-title {
+HomeScreen #recent-title {
     text-align: left;
     text-style: bold;
     margin-top: 2;
@@ -302,10 +299,43 @@ Input:focus {
     color: $accent;
 }
 
-#recent-table {
+HomeScreen #recent-table {
     height: 16;
     border: solid $panel;
     margin: 0 3 0 5;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   HomeContent（widgets/contents 版首页）布局覆盖
+   说明：Widget.DEFAULT_CSS 属于 default rules，会被 App 全局 CSS 覆盖；
+   因此页面布局级规则需在全局 CSS 中显式声明。
+   ═══════════════════════════════════════════════════════════════ */
+
+HomeContent #stats-section {
+    width: 1fr;
+}
+
+HomeContent .stat-card {
+    width: 1fr;
+    border: solid $panel;
+    padding: 1;
+    background: $panel 30%;
+}
+
+HomeContent .stat-card:last-child {
+    margin-left: 1;
+}
+
+HomeContent #recent-title {
+    margin-left: 0;
+    margin-top: 1;
+    margin-bottom: 0;
+}
+
+HomeContent #recent-table {
+    width: 1fr;
+    min-height: 10;
+    margin: 1 0 3 0;
 }
 
 /* ═══════════════════════════════════════════════════════════════

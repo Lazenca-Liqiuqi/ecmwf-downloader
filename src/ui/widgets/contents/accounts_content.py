@@ -27,7 +27,7 @@ class AccountsContent(Widget):
     - 操作按钮（添加、编辑、删除、启用/禁用、刷新）
     """
 
-    CSS = """
+    DEFAULT_CSS = """
     #accounts-title {
         text-align: left;
         text-style: bold;

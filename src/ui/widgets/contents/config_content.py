@@ -25,7 +25,7 @@ class ConfigContent(Widget):
     - 使用 Pydantic 进行参数验证
     """
 
-    CSS = """
+    DEFAULT_CSS = """
     #config-title {
         text-align: left;
         text-style: bold;

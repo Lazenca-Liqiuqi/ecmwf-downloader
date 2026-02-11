@@ -50,7 +50,9 @@ class TasksContent(Widget):
         margin-bottom: 1;
     }
 
-    /* 筛选区域 - 五等分布局 */
+    /* ═══════════════════════════════════════════════════════════════
+       筛选按钮区域 - 五等分布局
+       ═══════════════════════════════════════════════════════════════ */
     #filter-container {
         width: 1fr;
         height: auto;
@@ -62,7 +64,8 @@ class TasksContent(Widget):
         margin: 0 0 0 0;
     }
 
-    #filter-container Button:last-child {
+    #filter-container Button.-middle,
+    #filter-container Button.-last {
         margin-left: 1;
     }
 
@@ -72,27 +75,32 @@ class TasksContent(Widget):
         color: $accent;
     }
 
-    /* 任务表格 - 占满剩余空间 */
-    #tasks-table {
+    /* ═══════════════════════════════════════════════════════════════
+       任务表格 - 占满剩余空间
+       ═══════════════════════════════════════════════════════════════ */
+    #tasks-container #tasks-table {
         width: 1fr;
         height: 1fr;
         border: solid $panel;
         margin: 1 0 3 0;
     }
 
-    /* 操作按钮区域 */
-    #actions-container {
+    /* ═══════════════════════════════════════════════════════════════
+       操作按钮区域 - 三等分布局
+       ═══════════════════════════════════════════════════════════════ */
+    #tasks-container #actions-container {
         width: 1fr;
         height: auto;
+        margin: 1 0;
     }
 
-    #actions-container Button {
+    #tasks-container #actions-container Button {
         width: 1fr;
         margin: 0 0 0 0;
     }
 
-    #actions-container Button.-middle,
-    #actions-container Button.-last {
+    #tasks-container #actions-container Button.-middle,
+    #tasks-container #actions-container Button.-last {
         margin-left: 1;
     }
     """
@@ -119,10 +127,10 @@ class TasksContent(Widget):
             # 状态筛选区域（五等分）
             with Horizontal(id="filter-container"):
                 yield Button("全部", id="filter-all", variant="default")
-                yield Button("待下载", id="filter-pending", variant="default")
-                yield Button("下载中", id="filter-downloading", variant="default")
-                yield Button("已完成", id="filter-completed", variant="default")
-                yield Button("失败", id="filter-failed", variant="default")
+                yield Button("待下载", id="filter-pending", variant="default", classes="-middle")
+                yield Button("下载中", id="filter-downloading", variant="default", classes="-middle")
+                yield Button("已完成", id="filter-completed", variant="default", classes="-middle")
+                yield Button("失败", id="filter-failed", variant="default", classes="-last")
 
             # 任务表格
             yield TaskTable(id="tasks-table")

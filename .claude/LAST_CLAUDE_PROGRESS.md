@@ -10,6 +10,8 @@
 
 **日期**：2026-02-11
 
+**工作目录**：D:\data\project\ECMWF downloader
+
 ## 工作任务
 
 本次对话主要完成了**下载页布局调整**（任务#27）：
@@ -33,24 +35,6 @@
 - 添加 `on_resize` 事件处理动态列宽
 - 移除刷新按钮，保留三个控制按钮
 
-**关键代码变更**：
-```python
-# 导入变更
-from textual.containers import Horizontal, Vertical  # 移除Container
-from textual.css.query import NoMatches               # 新增
-from textual.events import Key, Resize                # 新增Resize
-
-# CSS命名空间
-DEFAULT_CSS = """
-#download-container #active-table {
-    width: 1fr;
-    height: 1fr;
-    border: solid $panel;
-    margin: 1 0 3 0;
-}
-"""
-```
-
 ### 2. 卡片布局实现
 
 **新增两个并排的统计卡片**：
@@ -65,89 +49,19 @@ DEFAULT_CSS = """
 └─────────────────────────────┴─────────────────────────────┘
 ```
 
-**卡片样式**：
-```css
-#download-container .info-card {
-    width: 1fr;
-    height: auto;
-    border: solid $panel;
-    padding: 1;
-    margin: 0 0 0 0;
-    background: $panel 30%;
-}
-```
-
 ### 3. 按钮对齐修复
 
 **问题**：任务页筛选按钮使用 `:last-child` 伪类，Textual不支持
 
-**修复方案**：
-```css
-/* ❌ 旧写法 - Textual不支持 */
-#filter-container Button:last-child {
-    margin-left: 1;
-}
-
-/* ✅ 新写法 - 使用CSS类 */
-#filter-container Button.-middle,
-#filter-container Button.-last {
-    margin-left: 1;
-}
-```
-
-**Python代码**：
-```python
-# 五等分筛选按钮
-with Horizontal(id="filter-container"):
-    yield Button("全部", id="filter-all", variant="default")
-    yield Button("待下载", id="filter-pending", variant="default", classes="-middle")
-    yield Button("下载中", id="filter-downloading", variant="default", classes="-middle")
-    yield Button("已完成", id="filter-completed", variant="default", classes="-middle")
-    yield Button("失败", id="filter-failed", variant="default", classes="-last")
-```
+**修复方案**：使用 CSS 类代替伪类
 
 ### 4. 进度条布局优化
 
-**需求**：进度条放到"整体进度"标题右边
-
-**实现**：
-```python
-# 标题和进度条在同一行
-with Horizontal(id="progress-header"):
-    yield Label("整体进度", classes="card-title")
-    yield ProgressBar(
-        total=100,
-        show_percentage=True,
-        show_eta=False,
-        id="overall-progress",
-    )
-```
-
-**CSS**：
-```css
-#download-container #overall-progress {
-    width: 1fr;
-    margin: 0;
-    margin-left: 2;  /* 和标题保持间距 */
-}
-```
+进度条放到"整体进度"标题右边，增加 `margin-left: 2` 保持间距
 
 ### 5. 统计标签竖排对齐
 
-**需求**：两个卡片高度一致，左边统计改为一行一个
-
-**之前**（横排）：
-```
-总任务: 10 | 下载中: 3 | 已完成: 5 | 失败: 2
-```
-
-**之后**（竖排）：
-```
-总任务: 10
-下载中: 3
-已完成: 5
-失败: 2
-```
+左边卡片统计从横排改为竖排，与右边卡片高度一致
 
 ## 交付物
 
@@ -158,26 +72,68 @@ with Horizontal(id="progress-header"):
 | `src/ui/widgets/contents/download_content.py` | 下载页布局重构，添加卡片样式，移除刷新按钮 |
 | `src/ui/widgets/contents/tasks_content.py` | 按钮CSS类和命名空间修复 |
 
-### 新增CSS类
+## 当前任务列表状态
 
-| 类名 | 用途 |
-|------|------|
-| `.info-card` | 下载页卡片容器 |
-| `.cards-row` | 卡片行容器 |
-| `#progress-header` | 进度标题行 |
-| `.-middle` | 中间按钮样式 |
-| `.-last` | 最后按钮样式 |
+### 已完成任务（21个）
+
+| 编号 | 任务 | 状态 |
+|------|------|------|
+| #1 | 创建UI测试目录结构 | ✅ completed |
+| #2 | 配置pytest-asyncio依赖 | ✅ completed |
+| #3 | 编写TaskTable组件测试 | ✅ completed |
+| #4 | 编写AccountTable组件测试 | ✅ completed |
+| #5 | 编写HomeScreen屏幕测试 | ✅ completed |
+| #6 | 编写TasksScreen屏幕测试 | ✅ completed |
+| #7 | 编写其他屏幕测试 | ✅ completed |
+| #8 | 编写导航集成测试 | ✅ completed |
+| #9 | 实现NavigationSidebar组件 | ✅ completed |
+| #10 | 实现ContentArea组件 | ✅ completed |
+| #11 | 迁移HomeScreen为HomeContent | ✅ completed |
+| #12 | 迁移其他屏幕为ContentWidget | ✅ completed |
+| #13 | 重构App主类实现侧边栏布局 | ✅ completed |
+| #14 | 添加侧边栏样式 | ✅ completed |
+| #15 | 更新导航测试适配新架构 | ✅ completed |
+| #16 | 端到端测试与验证 | ✅ completed |
+| #19 | 手动测试UI功能验证 | ✅ completed |
+| #20 | 紧急修复导航Bug | ✅ completed |
+| #21 | 修复DataTable.get_cell_at()参数错误 | ✅ completed |
+| #22 | 修复任务页面按h键RecursionError | ✅ completed |
+| #23 | 视觉效果优化 | ✅ completed |
+| #25 | 调整首页布局 | ✅ completed |
+| #26 | 调整任务页布局 | ✅ completed |
+| #27 | 调整下载页布局 | ✅ completed |
+
+### 待完成任务（5个）
+
+| 编号 | 任务 | 状态 |
+|------|------|------|
+| #17 | 更新项目文档 | ⏳ pending |
+| #24 | 手动测试与视觉效果调整 | ⏳ pending |
+| #28 | 调整账号页布局 | ⏳ pending |
+| #29 | 调整配置页布局 | ⏳ pending |
+
+## Git 状态
+
+**最新提交**：
+```
+7e0359b feat: 完成下载页布局调整（任务#27）
+a65da50 feat: 完成键盘导航和焦点管理全面优化
+b90ad6f feat: 任务页布局调整与CSS问题深度学习
+```
+
+**分支**：master
+
+**未跟踪文件**（临时文件，无需提交）：
+- `.claude/analyze-report.md`
+- `.claude/request.md`
+- `.claude/settings.local.json`
+- `nul`
+- `pencil/`
 
 ## 状态变动
 
 ### 完成任务
 - ✅ 任务#27：调整下载页布局
-
-### 待完成任务
-- ⏳ 任务#17：更新项目文档
-- ⏳ 任务#24：手动测试与视觉效果调整
-- ⏳ 任务#28：调整账号页布局
-- ⏳ 任务#29：调整配置页布局
 
 ### 版本变化
 - 版本号保持不变：v0.0.1
@@ -250,6 +206,33 @@ pytest tests/ -v --tb=short
 - 失败：0个测试
 - 覆盖率：70.84%
 
+## 下一步建议
+
+### 优先任务
+1. **任务#28**：调整账号页布局
+2. **任务#29**：调整配置页布局
+3. **任务#24**：手动测试与视觉效果调整
+4. **任务#17**：更新项目文档
+
+### 操作命令
+```bash
+# 克隆/拉取代码
+git clone <repo-url>
+cd "ECMWF downloader"
+git pull origin master
+
+# 查看任务列表
+# 运行: python -m src.ui 然后按 '?' 键
+
+# 继续开发任务
+# 参考 .claude/LAST_CLAUDE_PROGRESS.md 中的工作内容
+```
+
+### 开发环境检查
+- Python 3.8+
+- 依赖安装：`pip install -e .`
+- 配置文件：`config/default_config.yaml`, `config/accounts.yaml`
+
 ## 总结
 
 本次会话完成了**下载页布局调整**（任务#27）：
@@ -268,12 +251,8 @@ pytest tests/ -v --tb=short
 3. **按钮对齐**：统一使用CSS类代替伪类
 4. **命名空间**：所有CSS选择器添加父容器前缀
 
-### 下一步
-- 任务#28：调整账号页布局
-- 任务#29：调整配置页布局
-- 任务#24：手动测试与视觉效果调整
-
 ---
 
 **工作人员**：Claude Code
 **审核状态**：待审核
+**推送准备**：已完成，可推送到GitHub

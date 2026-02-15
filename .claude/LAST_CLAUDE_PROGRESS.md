@@ -63,10 +63,8 @@ AccountsContent #actions-section { margin: 1 3 1 5; }  /* 左边距为5 */
 
 | 编号 | 任务 | 状态 |
 |------|------|------|
-| #1 | 更新项目文档 | ⏳ pending |
-| #2 | 手动测试与视觉效果调整 | ⏳ pending |
 | #3 | 调整账号页布局 | ✅ completed |
-| #4 | 调整配置页布局 | ⏳ pending |
+| #5 | 更新项目文档 | ✅ completed |
 
 ## Git 状态
 

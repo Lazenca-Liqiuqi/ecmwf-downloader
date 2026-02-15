@@ -10,7 +10,7 @@ ECMWF（European Centre for Medium-Range Weather Forecasts）提供全球领先�
 
 **版本**：0.0.1
 
-**开发阶段**：第二阶段（TUI 基础框架）**已完成** 🎉
+**开发阶段**：第三阶段（TUI 测试与完善）**已完成** 🎉
 
 项目已完成核心模块和 TUI 界面的实现，包括：
 - ✅ 自定义异常类体系

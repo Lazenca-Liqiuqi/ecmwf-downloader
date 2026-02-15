@@ -12,7 +12,7 @@ from textual.widgets import Button, Footer, Header, Label
 from src.core.config import AccountInfo, AccountStatus
 from src.core.exceptions import AccountPoolError
 from src.ui.screens.base_screen import BaseScreen
-from src.ui.styles.theme import get_global_styles
+from src.ui.styles.theme import get_accounts_styles
 from src.ui.widgets.account_table import AccountTable
 
 
@@ -28,8 +28,8 @@ class AccountsScreen(BaseScreen):
     # 屏幕名称（用于导航）
     NAME = "accounts"
 
-    # 使用全局样式
-    CSS = get_global_styles()
+    # 账号管理专用样式
+    CSS = get_accounts_styles()
 
     def compose(self) -> Iterable:
         """构建账号管理 UI"""

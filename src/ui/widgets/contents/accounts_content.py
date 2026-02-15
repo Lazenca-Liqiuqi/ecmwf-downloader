@@ -28,21 +28,50 @@ class AccountsContent(Widget):
     """
 
     DEFAULT_CSS = """
+    AccountsContent {
+        width: 1fr;
+        height: 1fr;
+    }
+
+    #accounts-container {
+        width: 1fr;
+        height: 1fr;
+        overflow-y: auto;
+    }
+
     #accounts-title {
         text-align: left;
         text-style: bold;
         color: $accent;
-        margin-top: 1;
-        margin-bottom: 2;
+        margin-bottom: 1;
     }
 
     #table-section {
-        height: 20;
+        width: 1fr;
+        height: 1fr;
     }
 
     #accounts-table {
+        width: 1fr;
         height: 1fr;
         border: solid $panel;
+        margin: 1 0 3 0;
+    }
+
+    #actions-section {
+        width: 1fr;
+        height: auto;
+        margin: 1 0;
+    }
+
+    #actions-section Button {
+        width: 1fr;
+        margin: 0 0 0 0;
+    }
+
+    #actions-section Button.-middle,
+    #actions-section Button.-last {
+        margin-left: 1;
     }
     """
 
@@ -68,14 +97,14 @@ class AccountsContent(Widget):
             with Vertical(id="table-section", classes="table-section"):
                 yield AccountTable(id="accounts-table")
 
-            # 操作按钮区域
-            with Horizontal(id="actions-section", classes="button-section"):
+            # 操作按钮区域（六等分）
+            with Horizontal(id="actions-section"):
                 yield Button("添加", id="btn-add", variant="default")
-                yield Button("编辑", id="btn-edit", variant="default")
-                yield Button("删除", id="btn-delete", variant="default")
-                yield Button("启用", id="btn-enable", variant="default")
-                yield Button("禁用", id="btn-disable", variant="default")
-                yield Button("刷新", id="btn-refresh", variant="default")
+                yield Button("编辑", id="btn-edit", variant="default", classes="-middle")
+                yield Button("删除", id="btn-delete", variant="default", classes="-middle")
+                yield Button("启用", id="btn-enable", variant="default", classes="-middle")
+                yield Button("禁用", id="btn-disable", variant="default", classes="-middle")
+                yield Button("刷新", id="btn-refresh", variant="default", classes="-last")
 
     def on_mount(self) -> None:
         """组件挂载时初始化"""

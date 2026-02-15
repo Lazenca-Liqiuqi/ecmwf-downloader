@@ -555,6 +555,123 @@ TasksContent #actions-container Button.-middle,
 TasksContent #actions-container Button.-last {
     margin: 0 0 0 1;
 }
+
+/* AccountsContent：账号页布局规则需放在全局 CSS，覆盖 Widget.DEFAULT_CSS */
+AccountsContent #accounts-container {
+    width: 1fr;
+    height: 1fr;
+    padding: 1 1 1 1;
+    margin: 0;
+}
+
+AccountsContent #accounts-title {
+    text-align: left;
+    text-style: bold;
+    color: $accent;
+    margin-top: 1;
+    margin-bottom: 2;
+    margin-left: 0;
+}
+
+AccountsContent #table-section {
+    width: 1fr;
+    height: 1fr;
+    margin: 0;
+    padding: 0;
+}
+
+/* 与 TasksContent 一致：左边距为0，紧贴侧边栏 */
+AccountsContent #accounts-table {
+    width: 1fr;
+    height: 1fr;
+    border: solid $panel;
+    margin: 1 0;
+}
+
+AccountsContent #actions-section {
+    width: 1fr;
+    height: auto;
+    margin: 1 0;
+    padding: 0;
+}
+
+AccountsContent #actions-section Button {
+    width: 1fr;
+    margin: 0;
+    padding: 0 1;
+}
+
+AccountsContent #actions-section #btn-edit,
+AccountsContent #actions-section #btn-delete,
+AccountsContent #actions-section #btn-enable,
+AccountsContent #actions-section #btn-disable,
+AccountsContent #actions-section #btn-refresh {
+    margin-left: 1;
+}
+"""
+
+
+# =============================================================================
+# 账号管理专用样式
+# =============================================================================
+ACCOUNTS_CSS = """
+/* 账号管理屏幕特有样式 */
+
+/* 账号容器 */
+AccountsScreen #accounts-container {
+    width: 1fr;
+    padding: 1 1 1 1;
+    margin: 0;
+}
+
+/* 标题 */
+AccountsScreen #accounts-title {
+    text-align: left;
+    text-style: bold;
+    color: $accent;
+    margin-top: 1;
+    margin-bottom: 2;
+    margin-left: 0;
+}
+
+/* 账号表格区域 - 纯结构容器，无边距 */
+AccountsScreen #table-section {
+    width: 1fr;
+    height: auto;
+    margin: 0;
+    padding: 0;
+}
+
+/* 表格本体承担横向对齐，与首页/任务页一致 */
+AccountsScreen #accounts-table {
+    width: 1fr;
+    height: 16;
+    border: solid $panel;
+    margin: 0 3 0 5;
+}
+
+/* 操作按钮区域 - 与任务页一致 */
+AccountsScreen #actions-section {
+    width: 1fr;
+    height: auto;
+    margin: 1 3 1 5;
+    padding: 0;
+}
+
+AccountsScreen #actions-section Button {
+    width: 1fr;
+    margin: 0;
+    padding: 0 1;
+}
+
+/* 与 TasksContent/DownloadContent 一致：用左侧间距实现按钮间隔 */
+AccountsScreen #actions-section #btn-edit,
+AccountsScreen #actions-section #btn-delete,
+AccountsScreen #actions-section #btn-enable,
+AccountsScreen #actions-section #btn-disable,
+AccountsScreen #actions-section #btn-refresh {
+    margin-left: 1;
+}
 """
 
 
@@ -697,6 +814,15 @@ def get_tasks_styles() -> str:
         str: 任务列表 CSS 样式字符串
     """
     return TASKS_CSS
+
+
+def get_accounts_styles() -> str:
+    """获取账号管理屏幕专用 CSS 样式
+
+    Returns:
+        str: 账号管理 CSS 样式字符串
+    """
+    return ACCOUNTS_CSS
 
 
 def get_download_styles() -> str:

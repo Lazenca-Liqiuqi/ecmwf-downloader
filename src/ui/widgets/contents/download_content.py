@@ -6,7 +6,7 @@ ECMWF Downloader TUI 下载管理内容组件
 支持方向键操作：表格用方向键移动，Enter键触发按钮。
 """
 
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING, Iterable, Optional
 
 from textual.containers import Horizontal, Vertical
 from textual.css.query import NoMatches
@@ -54,66 +54,65 @@ class DownloadContent(Widget):
     }
 
     /* ═══════════════════════════════════════════════════════════════
-       卡片容器 - 占满宽度
+       进度信息卡片 - 单卡片布局
        ═══════════════════════════════════════════════════════════════ */
-    #download-container .cards-row {
-        width: 1fr;
-        height: auto;
-        margin: 1 0;
-    }
-
-    /* ═══════════════════════════════════════════════════════════════
-       卡片样式 - 带边框、背景色、内边距
-       ═══════════════════════════════════════════════════════════════ */
-    #download-container .info-card {
+    #download-container #progress-card {
         width: 1fr;
         height: auto;
         border: solid $panel;
-        padding: 1;
-        margin: 0 0 0 0;
+        padding: 1 0;
+        margin: 1 0;
         background: $panel 30%;
     }
 
-    #download-container .info-card:last-child {
-        margin-left: 1;
-    }
-
-    #download-container .card-title {
-        text-align: left;
-        text-style: bold;
-        color: $accent;
-        margin-bottom: 1;
-    }
-
-    #download-container .card-item {
-        text-align: left;
-        text-style: none;
-        color: $text;
-        margin: 0;
-    }
-
-    /* ═══════════════════════════════════════════════════════════════
-       进度标题行 - 标题和进度条在同一行
-       ═══════════════════════════════════════════════════════════════ */
-    #download-container #progress-header {
+    /* 第一行：标签 + 进度条 */
+    #download-container #progress-row {
         width: 1fr;
         height: auto;
-        margin-bottom: 1;
+        padding: 0 1;
     }
 
-    #download-container #progress-header .card-title {
+    #download-container #progress-label {
         width: auto;
-        margin-bottom: 0;
+        text-style: bold;
+        color: $accent;
+        margin-right: 1;
     }
 
+    /* 进度条占满剩余宽度 */
     #download-container #overall-progress {
         width: 1fr;
         margin: 0;
-        margin-left: 2;
+    }
+
+    /* 第二行：统计信息并排显示 */
+    #download-container #stats-row {
+        width: 1fr;
+        height: auto;
+        padding: 0 1;
+    }
+
+    #download-container .stat-item {
+        width: 1fr;
+        text-align: center;
+        margin: 0;
+    }
+
+    /* Textual CSS 不支持复杂 :not() 选择器，改为显式 ID 选择器 */
+    #download-container #stat-downloading,
+    #download-container #stat-completed,
+    #download-container #stat-pending,
+    #download-container #stat-failed {
+        margin-left: 1;
+    }
+
+    #download-container .stat-value {
+        color: $accent;
+        text-style: bold;
     }
 
     /* ═══════════════════════════════════════════════════════════════
-       活动任务列表区域
+       活动任务列表区域 - 加高表格
        ═══════════════════════════════════════════════════════════════ */
     #download-container #active-tasks-section {
         width: 1fr;
@@ -132,21 +131,21 @@ class DownloadContent(Widget):
         width: 1fr;
         height: 1fr;
         border: solid $panel;
-        margin: 1 0 3 0;
+        margin: 1 0 0 0;
     }
 
     /* ═══════════════════════════════════════════════════════════════
-       控制按钮区域 - 三等分布局
+       控制按钮区域 - 紧凑布局
        ═══════════════════════════════════════════════════════════════ */
     #download-container #control-section {
         width: 1fr;
         height: auto;
-        margin: 1 0;
+        margin: 1 0 0 0;
     }
 
     #download-container #control-section Button {
         width: 1fr;
-        margin: 0 0 0 0;
+        margin: 0;
     }
 
     #download-container #control-section Button.-middle,
@@ -165,6 +164,7 @@ class DownloadContent(Widget):
         super().__init__(**kwargs)
         self._app_ref = app  # 使用_app_ref避免与Widget.app属性冲突
         self._observer_registered = False
+        self._last_column_widths: Optional[tuple[int, int, int, int, int]] = None
 
     def compose(self) -> Iterable:
         """构建下载管理 UI"""
@@ -173,39 +173,32 @@ class DownloadContent(Widget):
             # 标题
             yield Label("下载管理", id="download-title", classes="page-title")
 
-            # 卡片区域：进度统计和活动任务统计并排
-            with Horizontal(id="cards-row", classes="cards-row"):
-                # 整体进度卡片
-                with Vertical(classes="info-card"):
-                    # 标题和进度条在同一行
-                    with Horizontal(id="progress-header"):
-                        yield Label("整体进度", classes="card-title")
-                        yield ProgressBar(
-                            total=100,
-                            show_percentage=True,
-                            show_eta=False,
-                            id="overall-progress",
-                        )
-                    # 统计信息 - 一行一个，和右边卡片对齐
-                    yield Label("总任务: 0", id="stat-total", classes="card-item")
-                    yield Label("下载中: 0", id="stat-downloading", classes="card-item")
-                    yield Label("已完成: 0", id="stat-completed", classes="card-item")
-                    yield Label("失败: 0", id="stat-failed", classes="card-item")
+            # 进度信息卡片（合并）
+            with Vertical(id="progress-card"):
+                # 第一行：整体进度标签 + 进度条（进度条占满剩余宽度）
+                with Horizontal(id="progress-row"):
+                    yield Label("整体进度", id="progress-label")
+                    yield ProgressBar(
+                        total=100,
+                        show_percentage=True,
+                        show_eta=False,
+                        id="overall-progress",
+                    )
 
-                # 活动任务统计卡片
-                with Vertical(classes="info-card"):
-                    yield Label("活动任务", classes="card-title")
-                    yield Label("下载中: 0", id="active-downloading", classes="card-item")
-                    yield Label("重试中: 0", id="active-retrying", classes="card-item")
-                    yield Label("队列中: 0", id="active-pending", classes="card-item")
-                    yield Label("已完成: 0", id="active-completed", classes="card-item")
+                # 第二行：统计信息并排（5项）
+                with Horizontal(id="stats-row"):
+                    yield Label("总文件: 0", id="stat-total", classes="stat-item")
+                    yield Label("下载中: 0", id="stat-downloading", classes="stat-item")
+                    yield Label("已完成: 0", id="stat-completed", classes="stat-item")
+                    yield Label("排队中: 0", id="stat-pending", classes="stat-item")
+                    yield Label("失败: 0", id="stat-failed", classes="stat-item")
 
             # 活动任务列表
             with Vertical(id="active-tasks-section"):
                 yield Label("活动任务列表", id="active-label")
                 yield TaskTable(id="active-table")
 
-            # 控制按钮区域（移除刷新按钮）
+            # 控制按钮区域
             with Horizontal(id="control-section"):
                 yield Button("开始所有", id="btn-start-all", variant="default")
                 yield Button("暂停所有", id="btn-pause-all", variant="default", classes="-middle")
@@ -236,7 +229,14 @@ class DownloadContent(Widget):
             # 注册进度观察者
             self._register_progress_observer()
         except Exception as e:
-            self.log.warning(f"[DownloadContent] 初始化失败: {e}")
+            import traceback
+            self.log.error(f"[DownloadContent] 初始化失败: {e}")
+            self.log.error(traceback.format_exc())
+            # 显示错误通知
+            try:
+                self.notify(f"下载页面初始化失败: {e}", severity="error")
+            except:
+                pass
 
     def _resize_table_columns(self) -> None:
         """按当前表格宽度动态调整列宽，尽量占满可用空间"""
@@ -264,6 +264,17 @@ class DownloadContent(Widget):
         filename_width = max(25, interior_width - task_id_width - status_width - progress_width - time_width)
 
         # 设置列宽（按添加顺序：任务ID、文件名、状态、进度、时间）
+        new_widths = (
+            task_id_width,
+            filename_width,
+            status_width,
+            progress_width,
+            time_width,
+        )
+        if self._last_column_widths == new_widths:
+            return
+
+        self._last_column_widths = new_widths
         columns[0].auto_width = False
         columns[0].width = task_id_width
         columns[1].auto_width = False
@@ -275,7 +286,7 @@ class DownloadContent(Widget):
         columns[4].auto_width = False
         columns[4].width = time_width
 
-        table.refresh(layout=True)
+        table.refresh()
 
     def on_unmount(self) -> None:
         """组件卸载时清理"""
@@ -314,9 +325,9 @@ class DownloadContent(Widget):
         progress_bar = self.query_one("#overall-progress", ProgressBar)
         progress_bar.progress = summary["overall_progress"]
 
-        # 更新整体进度卡片统计
+        # 更新统计信息（5项并排）
         self.query_one("#stat-total", Label).update(
-            f"总任务: {summary['total_tasks']}"
+            f"总文件: {summary['total_tasks']}"
         )
         self.query_one("#stat-downloading", Label).update(
             f"下载中: {summary['downloading']}"
@@ -324,33 +335,13 @@ class DownloadContent(Widget):
         self.query_one("#stat-completed", Label).update(
             f"已完成: {summary['completed']}"
         )
+        # 获取排队中任务数
+        pending_count = len(list(self._app_ref.progress_manager.get_tasks_by_status(TaskStatus.PENDING)))
+        self.query_one("#stat-pending", Label).update(
+            f"排队中: {pending_count}"
+        )
         self.query_one("#stat-failed", Label).update(
             f"失败: {summary['failed']}"
-        )
-
-        # 更新活动任务统计卡片
-        self._update_active_stats()
-
-    def _update_active_stats(self) -> None:
-        """更新活动任务统计卡片"""
-        # 获取各状态任务数
-        downloading = self._app_ref.progress_manager.get_tasks_by_status(TaskStatus.DOWNLOADING)
-        retrying = self._app_ref.progress_manager.get_tasks_by_status(TaskStatus.RETRYING)
-        pending = self._app_ref.progress_manager.get_tasks_by_status(TaskStatus.PENDING)
-        completed = self._app_ref.progress_manager.get_tasks_by_status(TaskStatus.COMPLETED)
-
-        # 更新活动任务统计
-        self.query_one("#active-downloading", Label).update(
-            f"下载中: {len(list(downloading))}"
-        )
-        self.query_one("#active-retrying", Label).update(
-            f"重试中: {len(list(retrying))}"
-        )
-        self.query_one("#active-pending", Label).update(
-            f"队列中: {len(list(pending))}"
-        )
-        self.query_one("#active-completed", Label).update(
-            f"已完成: {len(list(completed))}"
         )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -408,12 +399,20 @@ class DownloadContent(Widget):
         self, task_id: str, task_info: "TaskInfo"
     ) -> None:
         """进度管理器观察者回调（可能在后台线程调用）"""
-        # 使用 call_from_thread 确保在主线程中更新 UI
-        self._app_ref.call_from_thread(
-            self._on_progress_update,
-            task_id,
-            task_info,
-        )
+        # 组件卸载后或应用退出阶段，忽略后续更新，避免 call_from_thread 阻塞/异常
+        if (not self._observer_registered) or (not self.is_mounted):
+            return
+
+        try:
+            # 使用 call_from_thread 确保在主线程中更新 UI
+            self._app_ref.call_from_thread(
+                self._on_progress_update,
+                task_id,
+                task_info,
+            )
+        except Exception:
+            # 应用退出期间可能无法再调度回主线程，静默忽略即可
+            return
 
     def _on_progress_update(self, task_id: str, task_info: "TaskInfo") -> None:
         """进度更新时刷新界面
@@ -422,10 +421,16 @@ class DownloadContent(Widget):
             task_id: 任务ID
             task_info: 任务信息
         """
+        if not self.is_mounted:
+            return
+
         # 如果是活动任务（下载中或重试中），增量更新表格
         if task_info.status in (TaskStatus.DOWNLOADING, TaskStatus.RETRYING):
-            table = self.query_one("#active-table", TaskTable)
-            table.update_row(task_info)
+            try:
+                table = self.query_one("#active-table", TaskTable)
+                table.update_row(task_info)
+            except NoMatches:
+                return
 
         # 始终更新整体进度
         self._update_overall_progress()

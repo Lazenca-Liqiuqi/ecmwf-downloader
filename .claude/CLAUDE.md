@@ -4,8 +4,8 @@
 ECMWF（European Centre for Medium-Range Weather Forecasts，欧洲中期天气预报中心）提供全球领先的气象数据和预报服务。本项目旨在开发一个Python工具，用于自动化下载和管理ECMWF的气象数据，支持气象研究、气候分析和业务应用。
 
 ## 项目阶段
-**当前阶段**：第三阶段（TUI 测试与完善）**已完成** 🎉
-**版本**：v0.0.1
+**当前阶段**：第四阶段（功能完善）**已完成** 🎉
+**版本**：v0.2.0
 
 ## 目录结构
 ```
@@ -34,6 +34,9 @@ ECMWF（European Centre for Medium-Range Weather Forecasts，欧洲中期天气�
 │   │   │   ├── download_screen.py# 下载管理屏幕
 │   │   │   ├── accounts_screen.py# 账号管理屏幕
 │   │   │   └── config_screen.py  # 配置管理屏幕
+│   │   ├── dialogs/              # 对话框模块 ✅
+│   │   │   ├── base_dialog.py    # 基础对话框类
+│   │   │   └── account_dialog.py # 账号对话框
 │   │   ├── widgets/              # 自定义组件
 │   │   │   ├── task_table.py     # 任务表格组件
 │   │   │   └── account_table.py  # 账号表格组件

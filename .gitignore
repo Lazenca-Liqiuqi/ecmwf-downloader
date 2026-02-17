@@ -134,6 +134,7 @@ dmypy.json
 *.cdsapirc
 
 # Project specific
+/config/
 data/
 downloads/
 output/

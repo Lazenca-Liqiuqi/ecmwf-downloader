@@ -1,0 +1,30 @@
+# ECMWF CDS 账号配置模板
+# 复制此文件为 accounts.yaml 并填入你的真实账号信息
+#
+# 获取 API 凭证：
+# 1. 访问 https://cds.climate.copernicus.eu/
+# 2. 注册/登录账号
+# 3. 访问 https://cds.climate.copernicus.eu/api-how-to 获取 API Key
+
+accounts:
+  - id: account-1              # 账号唯一标识（自定义）
+    uid: your-uid              # CDS 用户 ID
+    key: your-api-key          # CDS API Key
+    url: https://cds.climate.copernicus.eu/api  # API 端点
+    status: active             # 状态: active/inactive/disabled
+    fail_count: 0              # 失败次数（自动管理，请勿手动修改）
+    used_count: 0              # 使用次数（自动管理，请勿手动修改）
+    last_used: null            # 最后使用时间（自动管理，请勿手动修改）
+
+  # 可以添加多个账号实现轮换下载
+  # - id: account-2
+  #   uid: your-uid-2
+  #   key: your-api-key-2
+  #   url: https://cds.climate.copernicus.eu/api
+  #   status: active
+  #   fail_count: 0
+  #   used_count: 0
+  #   last_used: null
+
+# 连续失败多少次后自动禁用账号
+auto_disable_threshold: 5

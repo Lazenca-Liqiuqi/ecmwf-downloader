@@ -32,13 +32,14 @@ class ContentArea(Vertical):
     DEFAULT_CSS = """
     ContentArea {
         width: 1fr;
-        height: 100%;
+        height: 1fr;
+        overflow: hidden;
     }
 
-    ContentArea > Container {
+    #content-container {
         width: 1fr;
         height: 1fr;
-        overflow-y: auto;
+        overflow: hidden;
     }
     """
 

@@ -476,6 +476,21 @@ Notification {
     border: tall $accent;
     padding: 1 2;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ConfigContent 滚动修复 - 覆盖全局固定高度
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 覆盖全局 button-section 固定高度，避免滚动内容被压扁 */
+ConfigContent #actions-section {
+    height: auto;
+    min-height: 3;
+}
+
+ConfigContent #time-section,
+ConfigContent #spatial-section {
+    height: auto;
+}
 """
 
 

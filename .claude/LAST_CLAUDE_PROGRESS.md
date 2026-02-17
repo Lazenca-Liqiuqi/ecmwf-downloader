@@ -4,7 +4,7 @@
 
 **项目名称**：ECMWF Downloader
 
-**项目阶段**：第四阶段（功能完善）已完成
+**项目阶段**：第五阶段（下载功能集成）**进行中**
 
 **版本**：v0.2.0
 
@@ -14,32 +14,65 @@
 
 ## 工作任务
 
-本次对话完成了以下任务：
+本次对话完成了第五阶段（下载功能集成）的核心开发工作：
 
-1. ✅ 查看项目当前状态
-2. ✅ 修复 config 目录被 git 追踪的安全问题
-3. ✅ 创建配置模板文件
-4. ✅ 提交更改
+| # | 任务 | 负责者 | 状态 |
+|---|------|--------|------|
+| 1 | 创建请求构建器模块 | Codex | ✅ 完成 |
+| 2 | 创建任务服务模块 | Codex | ✅ 完成 |
+| 3 | 创建请求预览对话框 | Codex | ✅ 完成 |
+| 4 | 增强 ConfigContent 集成新服务 | Codex | ✅ 完成 |
+| 5 | 更新模块导出和依赖 | Claude | ✅ 完成 |
+| 6 | 添加请求构建器单元测试 | Codex | ✅ 完成 |
+| 7 | 添加任务服务单元测试 | Codex | ✅ 完成 |
+| 8 | 修复配置页面滚动功能 | Codex | ✅ 完成 |
 
 ## 工作内容
 
-### 1. 安全修复：移除敏感配置的 git 追踪
+### 1. 请求构建器模块 (request_builder.py)
 
-**问题发现**：
-- `config/accounts.yaml` 包含用户 API 密钥等敏感信息，但被 git 追踪
-- `config/default_config.yaml` 用户配置也被追踪
+- 创建 `DownloadRequest` 数据类：包含 dataset、api_params、output_path、filename、time_range
+- 创建 `RequestBuilder` 类：
+  - `build_request()` - 从配置构建单个请求
+  - `build_batch_requests()` - 支持按月/年/不拆分三种策略
+  - `validate_request()` - 验证请求参数完整性
+  - `preview_request()` - 生成请求预览文本
 
-**解决方案**：
-- 更新 `.gitignore`，添加 `/config/` 忽略规则
-- 使用 `git rm --cached` 从追踪中移除 config 目录
-- 创建 `templates/config/` 目录存放配置模板
-- 模板文件（.example）供新用户参考，不包含敏感数据
+### 2. 任务服务模块 (task_service.py)
 
-### 2. .gitignore 路径匹配问题修复
+- 创建 `TaskService` 类：封装 ProgressManager 和 RequestBuilder
+- 实现统一的任务创建入口
+- 支持预览任务（不实际创建）
 
-**问题**：初始的 `config/` 规则会匹配任何包含 `config/` 的路径（如 `templates/config/`）
+### 3. 请求预览对话框 (request_preview_dialog.py)
 
-**解决**：改为 `/config/` 只匹配根目录下的 config 目录
+- 继承 BaseDialog
+- 展示拆分策略、任务数量、任务列表
+- 支持 ScrollView 滚动
+
+### 4. ConfigContent 增强
+
+- 添加拆分策略选择（RadioSet：按月/按年/不拆分）
+- 添加预览按钮和任务数量标签
+- 集成 TaskService 和 RequestPreviewDialog
+- 实现异步预览功能
+
+### 5. 配置页面滚动修复
+
+**根因分析**：
+- `#years-container/#months-container` 等 Vertical 容器未设置 `height: auto`
+- 被默认 `1fr` 拉满到 21 行高度，把输入框推到可视区外
+
+**修复方案**：
+- 所有容器统一设置 `height: auto`
+- `#config-container` 添加 `layout: vertical; overflow-y: auto`
+- `ConfigContent Input` 添加 `min-height: 3` 和边框样式
+
+### 6. 单元测试
+
+- `test_request_builder.py`：10 个测试用例
+- `test_task_service.py`：11 个测试用例
+- 全部 21 个测试通过
 
 ## 交付物
 
@@ -47,71 +80,78 @@
 
 | 文件 | 说明 |
 |------|------|
-| `templates/config/accounts.yaml.example` | 账号配置模板 |
-| `templates/config/default_config.yaml.example` | 默认配置模板 |
+| `src/core/request_builder.py` | 请求构建器模块 |
+| `src/core/task_service.py` | 任务服务模块 |
+| `src/ui/dialogs/request_preview_dialog.py` | 请求预览对话框 |
+| `tests/test_core/test_request_builder.py` | 请求构建器测试 |
+| `tests/test_core/test_task_service.py` | 任务服务测试 |
 
 ### 修改文件
 
-| 文件 | 说明 |
-|------|------|
-| `.gitignore` | 添加 `/config/` 忽略规则 |
-
-### 删除文件（从 git 追踪中移除）
-
-| 文件 | 说明 |
-|------|------|
-| `config/accounts.yaml` | 用户账号配置（本地保留） |
-| `config/default_config.yaml` | 用户默认配置（本地保留） |
-
-## Git 状态
-
-**分支**：master
-
-**最新提交**：`78d3719 fix: 将用户配置从 git 追踪中移除`
-
-**本地状态**：领先远程 7 个提交
+| 文件 | 修改内容 |
+|------|----------|
+| `src/core/__init__.py` | 导出新模块 |
+| `src/ui/dialogs/__init__.py` | 导出 RequestPreviewDialog |
+| `src/ui/widgets/contents/config_content.py` | 集成新服务、修复滚动 |
+| `src/ui/widgets/content_area.py` | 滚动相关样式调整 |
+| `src/ui/styles/theme.py` | ConfigContent 样式覆盖 |
+| `tests/test_ui/test_navigation.py` | 更新类型引用 |
 
 ## 状态变动
+
+### 项目阶段
+- 第四阶段（功能完善）已完成 → 第五阶段（下载功能集成）进行中
 
 ### 版本变化
 - 版本号保持不变：v0.2.0
 
-### 项目阶段
-- 保持第四阶段（功能完善）已完成状态
+### 数据流
+
+```
+用户输入 (ConfigContent)
+    ↓
+DownloadConfig (Pydantic 验证)
+    ↓
+RequestBuilder.build_batch_requests()
+    ↓
+TaskService.create_batch_tasks()
+    ↓
+ProgressManager.create_task()
+    ↓
+任务进入 PENDING 状态（等待执行）
+```
 
 ## 工具
 
 ### 主要工具
-- **Read/Edit**：文件读写和编辑
-- **Bash**：git 操作（rm --cached, add, commit）
-- **Grep**：搜索 .gitignore 规则
+- **Codex**：负责复杂编码任务（请求构建器、任务服务、预览对话框、滚动修复）
+- **Claude Code**：负责上下文收集、任务规划、导出更新、简单代码修改
+- **pytest**：单元测试验证
 
-### 技术要点
-
-#### git rm --cached
-- 从 git 索引中移除文件，但保留本地文件
-- 适用于敏感文件已被追踪后的修复
-
-#### .gitignore 路径规则
-- `config/` 匹配任何位置的 config 目录
-- `/config/` 只匹配根目录下的 config 目录
+### 技术栈
+- **Textual TUI**：界面框架
+- **Pydantic**：数据验证
+- **dataclasses**：数据类定义
 
 ## 下一步建议
 
-1. 推送本地提交到远程仓库
-2. 继续第五阶段：核心下载功能集成
+1. 运行完整测试套件验证所有功能
+2. 启动 TUI 测试预览功能
+3. 继续实现下载执行功能（DownloadWorker 集成）
 
 ## 总结
 
-本次会话完成了**安全配置修复**：
+本次会话完成了**第五阶段核心开发**：
 
 ### 主要成果
-- ✅ 敏感配置文件不再被 git 追踪
-- ✅ 创建配置模板供新用户参考
-- ✅ 修复 .gitignore 路径匹配问题
-- ✅ 提交更改
+- ✅ 请求构建器模块（支持三种拆分策略）
+- ✅ 任务服务模块（统一任务创建入口）
+- ✅ 请求预览对话框（展示任务详情）
+- ✅ ConfigContent 增强（预览功能集成）
+- ✅ 配置页面滚动修复
+- ✅ 21 个单元测试全部通过
 
 ---
 
-**工作人员**：Claude Code
+**工作人员**：Claude Code + Codex
 **审核状态**：已完成

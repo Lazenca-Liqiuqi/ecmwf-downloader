@@ -6,14 +6,16 @@ ECMWF Downloader TUI 配置管理内容组件
 支持方向键操作：输入框用方向键移动光标，Enter键触发按钮。
 """
 
-from typing import Iterable
+from typing import Iterable, Literal
 
-from textual.containers import Container, Horizontal, Vertical
+from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.events import Key
 from textual.widget import Widget
-from textual.widgets import Button, Input, Label
+from textual.widgets import Button, Input, Label, RadioButton, RadioSet
 
 from src.core.config import DownloadConfig
+from src.core.task_service import TaskService
+from src.ui.dialogs import RequestPreviewDialog
 
 
 class ConfigContent(Widget):
@@ -26,6 +28,32 @@ class ConfigContent(Widget):
     """
 
     DEFAULT_CSS = """
+    ConfigContent {
+        width: 1fr;
+        height: 1fr;
+        overflow: hidden;
+    }
+
+    #config-container {
+        width: 1fr;
+        height: 1fr;
+        layout: vertical;
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+
+    ConfigContent Input {
+        width: 1fr;
+        min-height: 3;
+        border: round $panel;
+        background: $surface;
+        color: $text;
+    }
+
+    ConfigContent Input:focus {
+        border: round $accent;
+    }
+
     #config-title {
         text-align: left;
         text-style: bold;
@@ -40,15 +68,33 @@ class ConfigContent(Widget):
     #months-label,
     #area-label,
     #levels-label,
-    #output-label {
+    #output-label,
+    #strategy-label {
         text-style: bold;
         margin-bottom: 0;
         color: $text 80%;
     }
 
+    #task-count-label {
+        text-style: bold;
+        color: $accent;
+    }
+
+    #dataset-section,
+    #variables-section,
+    #output-section,
+    #strategy-section,
+    #preview-info-section,
     #time-section,
-    #spatial-section {
-        height: 4;
+    #spatial-section,
+    #actions-section {
+        height: auto;
+    }
+
+    #actions-section {
+        min-height: 3;
+        margin: 0 3 0 3;
+        padding: 0 1;
     }
 
     #years-container,
@@ -56,6 +102,11 @@ class ConfigContent(Widget):
     #area-container,
     #levels-container {
         width: 1fr;
+        height: auto;
+    }
+
+    #split-strategy-set {
+        height: auto;
     }
     """
 
@@ -68,11 +119,12 @@ class ConfigContent(Widget):
         """
         super().__init__(**kwargs)
         self._app_ref = app  # 使用_app_ref避免与Widget.app属性冲突
+        self._task_service = TaskService(app.progress_manager)
 
     def compose(self) -> Iterable:
         """构建配置管理 UI"""
-        # 主容器
-        with Container(id="config-container", classes="content-container"):
+        # 主容器（可滚动）
+        with ScrollableContainer(id="config-container", classes="content-container"):
             # 标题
             yield Label("创建下载任务", id="config-title", classes="page-title")
 
@@ -125,17 +177,33 @@ class ConfigContent(Widget):
                     value="./data/downloads",
                 )
 
-            # 操作按钮
-            with Horizontal(id="actions-section", classes="button-section"):
+            # 拆分策略配置
+            with Vertical(id="strategy-section", classes="form-section"):
+                yield Label("拆分策略", id="strategy-label")
+                with RadioSet(id="split-strategy-set"):
+                    yield RadioButton("按月", id="strategy-month", value=True)
+                    yield RadioButton("按年", id="strategy-year")
+                    yield RadioButton("不拆分", id="strategy-none")
+
+            # 任务数量预览
+            with Horizontal(id="preview-info-section", classes="section-compact"):
+                yield Label("将创建 0 个任务", id="task-count-label")
+
+            # 操作按钮（不使用全局 button-section 类，避免固定高度冲突）
+            with Horizontal(id="actions-section"):
+                yield Button("预览", id="btn-preview", variant="primary")
                 yield Button("创建任务", id="btn-create", variant="default")
                 yield Button("清空", id="btn-clear", variant="default")
                 yield Button("重置", id="btn-reset", variant="default")
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
         """按钮点击事件处理"""
         button_id = event.button.id
 
-        if button_id == "btn-create":
+        if button_id == "btn-preview":
+            await self._handle_preview()
+
+        elif button_id == "btn-create":
             self._handle_create()
 
         elif button_id == "btn-clear":
@@ -144,137 +212,104 @@ class ConfigContent(Widget):
         elif button_id == "btn-reset":
             self._handle_reset()
 
-    def _handle_create(self) -> None:
-        """处理创建任务"""
+    async def _handle_preview(self) -> None:
+        """处理预览按钮：展示请求参数并可确认创建任务。"""
         try:
-            # 获取表单数据
-            dataset = self.query_one("#input-dataset", Input).value.strip()
-            variables_str = self.query_one("#input-variables", Input).value.strip()
-            years_str = self.query_one("#input-years", Input).value.strip()
-            months_str = self.query_one("#input-months", Input).value.strip()
-            area_str = self.query_one("#input-area", Input).value.strip()
-            levels_str = self.query_one("#input-levels", Input).value.strip()
-            output_dir = self.query_one("#input-output", Input).value.strip()
+            config = self._build_config_from_form()
+            split_strategy = self._get_split_strategy()
+            preview_items = self._task_service.preview_tasks(config, split_strategy)
 
-            # 验证必填字段
-            if not dataset:
-                self.notify("请输入数据集类型", severity="warning")
-                return
+            self._update_task_count(len(preview_items))
 
-            if not variables_str:
-                self.notify("请输入变量列表", severity="warning")
-                return
-
-            if not years_str:
-                self.notify("请输入年份", severity="warning")
-                return
-
-            if not months_str:
-                self.notify("请输入月份", severity="warning")
-                return
-
-            # 解析字段
-            variables = [v.strip() for v in variables_str.split(",")]
-            years = [int(y.strip()) for y in years_str.split(",")]
-            months = [int(m.strip()) for m in months_str.split(",")]
-
-            # 可选字段
-            area = None
-            if area_str:
-                area = [float(x.strip()) for x in area_str.split(",")]
-
-            pressure_levels = None
-            if levels_str:
-                pressure_levels = [int(l.strip()) for l in levels_str.split(",")]
-
-            # 使用 Pydantic 验证配置
-            config = DownloadConfig(
-                dataset=dataset,
-                variables=variables,
-                years=years,
-                months=months,
-                days=None,
-                times=None,
-                pressure_levels=pressure_levels,
-                area=area,
-                output_dir=output_dir,
+            result = await self.app.push_screen(
+                RequestPreviewDialog(preview_items, split_strategy)
             )
+            if result and result.get("confirmed"):
+                task_ids = self._task_service.create_batch_tasks(config, split_strategy)
+                self.notify(f"已创建 {len(task_ids)} 个任务", severity="success")
+                self._handle_clear()
 
-            # 创建任务
-            self._create_task(config)
+        except ValueError as e:
+            self.notify(f"参数验证失败: {str(e)}", severity="error")
+        except Exception as e:
+            self.notify(f"预览失败: {str(e)}", severity="error")
+
+    def _handle_create(self) -> None:
+        """处理创建任务按钮，直接创建任务。"""
+        try:
+            config = self._build_config_from_form()
+            split_strategy = self._get_split_strategy()
+            task_ids = self._task_service.create_batch_tasks(config, split_strategy)
+            self._update_task_count(len(task_ids))
+            self.notify(f"已创建 {len(task_ids)} 个任务", severity="success")
+            self._handle_clear()
 
         except ValueError as e:
             self.notify(f"参数验证失败: {str(e)}", severity="error")
         except Exception as e:
             self.notify(f"创建任务失败: {str(e)}", severity="error")
 
-    def _create_task(self, config: DownloadConfig) -> None:
-        """创建下载任务
+    def _build_config_from_form(self) -> DownloadConfig:
+        """从表单读取输入并构建下载配置。"""
+        dataset = self.query_one("#input-dataset", Input).value.strip()
+        variables_str = self.query_one("#input-variables", Input).value.strip()
+        years_str = self.query_one("#input-years", Input).value.strip()
+        months_str = self.query_one("#input-months", Input).value.strip()
+        area_str = self.query_one("#input-area", Input).value.strip()
+        levels_str = self.query_one("#input-levels", Input).value.strip()
+        output_dir = self.query_one("#input-output", Input).value.strip()
 
-        Args:
-            config: 下载配置
-        """
-        from pathlib import Path
+        if not dataset:
+            raise ValueError("请输入数据集类型")
+        if not variables_str:
+            raise ValueError("请输入变量列表")
+        if not years_str:
+            raise ValueError("请输入年份")
+        if not months_str:
+            raise ValueError("请输入月份")
 
-        # 生成任务ID
-        import uuid
-        task_id = f"task-{uuid.uuid4().hex[:8]}"
+        variables = [item.strip() for item in variables_str.split(",") if item.strip()]
+        years = [int(item.strip()) for item in years_str.split(",") if item.strip()]
+        months = [int(item.strip()) for item in months_str.split(",") if item.strip()]
 
-        # 生成文件名
-        filename = self._generate_filename(config)
+        area = None
+        if area_str:
+            area = [float(item.strip()) for item in area_str.split(",") if item.strip()]
 
-        # 准备下载参数
-        download_params = {
-            "dataset": config.dataset,
-            "variables": config.variables,
-            "years": config.years,
-            "months": config.months,
-        }
+        pressure_levels = None
+        if levels_str:
+            pressure_levels = [
+                int(item.strip()) for item in levels_str.split(",") if item.strip()
+            ]
 
-        # 添加可选参数
-        if config.days:
-            download_params["days"] = config.days
-        if config.times:
-            download_params["times"] = config.times
-        if config.pressure_levels:
-            download_params["pressure_levels"] = config.pressure_levels
-        if config.area:
-            download_params["area"] = config.area
-
-        # 设置输出路径
-        output_path = Path(config.output_dir) / filename
-        download_params["output_path"] = output_path
-
-        # 创建任务
-        self._app_ref.progress_manager.create_task(
-            task_id=task_id,
-            filename=filename,
-            metadata={
-                "download_params": download_params,
-                "max_retries": 3,
-            },
+        return DownloadConfig(
+            dataset=dataset,
+            variables=variables,
+            years=years,
+            months=months,
+            days=None,
+            times=None,
+            pressure_levels=pressure_levels,
+            area=area,
+            output_dir=output_dir,
         )
 
-        self.notify(f"任务创建成功: {task_id}", severity="success")
+    def _get_split_strategy(self) -> Literal["month", "year", "none"]:
+        """获取当前选中的拆分策略。"""
+        radio_set = self.query_one("#split-strategy-set", RadioSet)
+        pressed = radio_set.pressed_button
+        if pressed is None:
+            return "month"
 
-        # 清空表单
-        self._handle_clear()
+        if pressed.id == "strategy-year":
+            return "year"
+        if pressed.id == "strategy-none":
+            return "none"
+        return "month"
 
-    def _generate_filename(self, config: DownloadConfig) -> str:
-        """生成输出文件名
-
-        Args:
-            config: 下载配置
-
-        Returns:
-            str: 文件名
-        """
-        # 简单的文件名生成逻辑
-        var_name = config.variables[0] if config.variables else "data"
-        year_str = f"{config.years[0]}-{config.years[-1]}" if config.years else "all"
-        month_str = f"{config.months[0]:02d}-{config.months[-1]:02d}" if config.months else "all"
-
-        return f"{config.dataset}_{var_name}_{year_str}_{month_str}.nc"
+    def _update_task_count(self, count: int) -> None:
+        """更新任务数量提示标签。"""
+        self.query_one("#task-count-label", Label).update(f"将创建 {count} 个任务")
 
     def _handle_clear(self) -> None:
         """清空表单"""
@@ -285,6 +320,7 @@ class ConfigContent(Widget):
         self.query_one("#input-area", Input).value = ""
         self.query_one("#input-levels", Input).value = ""
         self.query_one("#input-output", Input).value = ""
+        self._update_task_count(0)
 
     def _handle_reset(self) -> None:
         """重置表单为默认值"""
@@ -295,6 +331,9 @@ class ConfigContent(Widget):
         self.query_one("#input-area", Input).value = ""
         self.query_one("#input-levels", Input).value = ""
         self.query_one("#input-output", Input).value = "./data/downloads"
+        strategy_set = self.query_one("#split-strategy-set", RadioSet)
+        strategy_set.pressed_index = 0
+        self._update_task_count(0)
 
     def refresh_data(self) -> None:
         """刷新配置数据（无需实现）"""

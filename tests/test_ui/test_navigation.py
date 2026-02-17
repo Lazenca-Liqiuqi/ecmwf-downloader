@@ -9,6 +9,8 @@ import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+from textual.containers import ScrollableContainer
+
 from src.ui.app import ECMWFDownloaderApp, create_app
 from src.ui.widgets.navigation_sidebar import NavigationSidebar
 from src.ui.widgets.content_area import ContentArea
@@ -422,6 +424,20 @@ class TestContentAreaSwitching:
         except Exception:
             # ContentArea.clear_content可能有查询问题
             pass
+
+    async def test_config_page_container_is_scrollable(self, app_instance):
+        """测试配置页在内容溢出时可纵向滚动"""
+        app, pilot = app_instance
+
+        app.action_switch_page("config")
+        await pilot.pause()
+        await pilot.pause()
+
+        config_container = app.query_one("#config-container", ScrollableContainer)
+        assert config_container.max_scroll_y > 0
+        config_container.scroll_end(animate=False)
+        await pilot.pause()
+        assert config_container.scroll_y > 0
 
 
 class TestKeyPressSimulations:

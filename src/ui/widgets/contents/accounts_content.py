@@ -6,15 +6,16 @@ ECMWF Downloader TUI 账号管理内容组件
 支持方向键操作：表格用方向键移动，Enter键选中行/触发按钮。
 """
 
-from typing import Iterable
+from typing import Any, Dict, Iterable, Optional
 
 from textual.containers import Container, Horizontal, Vertical
 from textual.events import Key
 from textual.widget import Widget
 from textual.widgets import Button, Label
 
-from src.core.config import AccountInfo
+from src.core.config import AccountInfo, AccountStatus
 from src.core.exceptions import AccountPoolError
+from src.ui.dialogs.account_dialog import AccountDialog
 from src.ui.widgets.account_table import AccountTable
 
 
@@ -122,6 +123,12 @@ class AccountsContent(Widget):
         # 使用 AccountTable 的 load_accounts 方法加载
         table.load_accounts(accounts)
 
+        # 空账号池提示（延迟显示，确保 UI 已渲染）
+        if not accounts:
+            self.call_later(
+                lambda: self.notify("暂无数据，请添加", severity="information")
+            )
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """按钮点击事件处理"""
         button_id = event.button.id
@@ -145,12 +152,63 @@ class AccountsContent(Widget):
             self._handle_refresh()
 
     def _handle_add(self) -> None:
-        """处理添加账号"""
-        # TODO: 实现添加账号对话框（需要弹出输入框）
-        self.notify("添加账号功能待实现", severity="information")
+        """处理添加账号
+
+        弹出添加账号对话框，收集用户输入后创建新账号。
+        """
+        self.app.push_screen(
+            AccountDialog(mode="add"),
+            callback=self._on_add_dialog_result,
+        )
+
+    def _on_add_dialog_result(self, result: Optional[Dict[str, Any]]) -> None:
+        """添加账号对话框结果回调
+
+        Args:
+            result: 对话框返回的数据，取消时为 None
+        """
+        if result is None:
+            # 用户取消
+            return
+
+        # 创建新的账号信息
+        new_account = AccountInfo(
+            id=result["id"],
+            uid=result["uid"],
+            key=result["key"],
+            url=result.get("url", "https://cds.climate.copernicus.eu/api"),
+            status=AccountStatus.ACTIVE,
+            used_count=0,
+            fail_count=0,
+        )
+
+        try:
+            # 添加到账号池
+            self._app_ref.account_pool.add_account(new_account)
+        except AccountPoolError as e:
+            self.notify(f"添加账号失败: {str(e)}", severity="error")
+            return
+
+        try:
+            # 保存到配置文件
+            self._app_ref.account_pool.save_to_file()
+
+            # 刷新表格
+            self._load_accounts()
+
+            # 显示成功消息
+            self.notify(f"账号 {new_account.id} 添加成功", severity="success")
+
+        except Exception as e:
+            # 保存失败，回滚内存变更
+            self._app_ref.account_pool.remove_account(new_account.id)
+            self.notify(f"保存账号配置失败: {str(e)}", severity="error")
 
     def _handle_edit(self) -> None:
-        """处理编辑账号"""
+        """处理编辑账号
+
+        弹出编辑账号对话框，允许用户修改现有账号信息。
+        """
         table = self.query_one("#accounts-table", AccountTable)
         account_id = table.get_selected_account_id()
 
@@ -158,8 +216,71 @@ class AccountsContent(Widget):
             self.notify("请先选择一个账号", severity="warning")
             return
 
-        # TODO: 实现编辑账号对话框
-        self.notify(f"编辑账号 {account_id} 功能待实现", severity="information")
+        # 获取现有账号数据
+        accounts = self._app_ref.account_pool.get_all_accounts()
+        existing_account = None
+        for acc in accounts:
+            if acc.id == account_id:
+                existing_account = acc
+                break
+
+        if existing_account is None:
+            self.notify(f"找不到账号: {account_id}", severity="error")
+            return
+
+        # 准备对话框数据（只传递可编辑字段）
+        account_data = {
+            "id": existing_account.id,
+            "uid": existing_account.uid,
+            "key": existing_account.key,
+            "url": existing_account.url,
+        }
+
+        # 弹出编辑对话框
+        self.app.push_screen(
+            AccountDialog(mode="edit", account_data=account_data),
+            callback=lambda result: self._on_edit_dialog_result(result, existing_account),
+        )
+
+    def _on_edit_dialog_result(
+        self, result: Optional[Dict[str, Any]], original_account: AccountInfo
+    ) -> None:
+        """编辑账号对话框结果回调
+
+        Args:
+            result: 对话框返回的数据，取消时为 None
+            original_account: 原始账号信息（用于保留统计数据）
+        """
+        if result is None:
+            # 用户取消
+            return
+
+        # 保存原始值用于回滚
+        old_uid = original_account.uid
+        old_key = original_account.key
+        old_url = original_account.url
+
+        # 更新账号信息（保留统计数据）
+        original_account.uid = result["uid"]
+        original_account.key = result["key"]
+        original_account.url = result.get("url", "https://cds.climate.copernicus.eu/api")
+
+        try:
+            # 保存到配置文件
+            self._app_ref.account_pool.save_to_file()
+
+            # 刷新表格
+            self._load_accounts()
+
+            # 显示成功消息
+            self.notify(f"账号 {original_account.id} 更新成功", severity="success")
+
+        except Exception as e:
+            # 保存失败，回滚内存变更
+            original_account.uid = old_uid
+            original_account.key = old_key
+            original_account.url = old_url
+            self.notify(f"保存账号配置失败: {str(e)}", severity="error")
 
     def _handle_delete(self) -> None:
         """处理删除账号"""
@@ -170,14 +291,31 @@ class AccountsContent(Widget):
             self.notify("请先选择一个账号", severity="warning")
             return
 
+        # 获取要删除的账号（用于回滚）
+        accounts = self._app_ref.account_pool.get_all_accounts()
+        deleted_account = None
+        for acc in accounts:
+            if acc.id == account_id:
+                deleted_account = acc
+                break
+
+        if deleted_account is None:
+            self.notify(f"找不到账号: {account_id}", severity="error")
+            return
+
         # 删除账号
+        self._app_ref.account_pool.remove_account(account_id)
+
         try:
-            self._app_ref.account_pool.remove_account(account_id)
+            # 保存到配置文件
+            self._app_ref.account_pool.save_to_file()
             self.notify(f"账号 {account_id} 已删除", severity="success")
             # 重新加载账号列表
             self._load_accounts()
-        except AccountPoolError as e:
-            self.notify(f"删除账号失败: {str(e)}", severity="error")
+        except Exception as e:
+            # 保存失败，回滚内存变更
+            self._app_ref.account_pool.add_account(deleted_account)
+            self.notify(f"保存账号配置失败: {str(e)}", severity="error")
 
     def _handle_enable(self) -> None:
         """处理启用账号"""
@@ -188,14 +326,33 @@ class AccountsContent(Widget):
             self.notify("请先选择一个账号", severity="warning")
             return
 
+        # 获取账号并保存原始状态（用于回滚）
+        accounts = self._app_ref.account_pool.get_all_accounts()
+        target_account = None
+        for acc in accounts:
+            if acc.id == account_id:
+                target_account = acc
+                break
+
+        if target_account is None:
+            self.notify(f"找不到账号: {account_id}", severity="error")
+            return
+
+        old_status = target_account.status
+
         # 启用账号
+        self._app_ref.account_pool.enable_account(account_id)
+
         try:
-            self._app_ref.account_pool.enable_account(account_id)
+            # 保存到配置文件
+            self._app_ref.account_pool.save_to_file()
             self.notify(f"账号 {account_id} 已启用", severity="success")
             # 重新加载账号列表
             self._load_accounts()
-        except AccountPoolError as e:
-            self.notify(f"启用账号失败: {str(e)}", severity="error")
+        except Exception as e:
+            # 保存失败，回滚内存变更
+            target_account.status = old_status
+            self.notify(f"保存账号配置失败: {str(e)}", severity="error")
 
     def _handle_disable(self) -> None:
         """处理禁用账号"""
@@ -206,14 +363,33 @@ class AccountsContent(Widget):
             self.notify("请先选择一个账号", severity="warning")
             return
 
+        # 获取账号并保存原始状态（用于回滚）
+        accounts = self._app_ref.account_pool.get_all_accounts()
+        target_account = None
+        for acc in accounts:
+            if acc.id == account_id:
+                target_account = acc
+                break
+
+        if target_account is None:
+            self.notify(f"找不到账号: {account_id}", severity="error")
+            return
+
+        old_status = target_account.status
+
         # 禁用账号
+        self._app_ref.account_pool.disable_account(account_id)
+
         try:
-            self._app_ref.account_pool.disable_account(account_id)
+            # 保存到配置文件
+            self._app_ref.account_pool.save_to_file()
             self.notify(f"账号 {account_id} 已禁用", severity="success")
             # 重新加载账号列表
             self._load_accounts()
-        except AccountPoolError as e:
-            self.notify(f"禁用账号失败: {str(e)}", severity="error")
+        except Exception as e:
+            # 保存失败，回滚内存变更
+            target_account.status = old_status
+            self.notify(f"保存账号配置失败: {str(e)}", severity="error")
 
     def _handle_refresh(self) -> None:
         """处理刷新操作"""

@@ -48,12 +48,8 @@ class AccountPool:
         if config_file is not None:
             self.load_from_file(config_file)
 
-        # 验证至少有一个可用账号
-        if not self.accounts:
-            raise AccountPoolError(
-                "账号池为空，请至少添加一个有效的账号",
-                available_count=0,
-            )
+        # 注意：允许空账号池，用户可以在 UI 中添加账号
+        # 延迟验证在 get_next_account() 方法中实现
 
     def load_from_file(self, config_file: Path) -> None:
         """从YAML文件加载账号配置
@@ -111,15 +107,15 @@ class AccountPool:
 
         try:
             with self._lock:
-                # 转换为字典格式
+                # 转换为字典格式（使用 mode='json' 确保枚举值被正确序列化为字符串）
                 data = {
-                    "accounts": [acc.model_dump() for acc in self.accounts],
+                    "accounts": [acc.model_dump(mode='json') for acc in self.accounts],
                     "auto_disable_threshold": self.auto_disable_threshold,
                 }
 
-                # 写入文件
+                # 写入文件（使用 safe_dump 避免生成 Python 特定标签）
                 with open(target_file, "w", encoding="utf-8") as f:
-                    yaml.dump(data, f, allow_unicode=True, default_flow_style=False)
+                    yaml.safe_dump(data, f, allow_unicode=True, default_flow_style=False)
 
         except Exception as e:
             raise AccountPoolError(

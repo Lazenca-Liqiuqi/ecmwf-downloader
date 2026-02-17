@@ -4,9 +4,9 @@
 
 **项目名称**：ECMWF Downloader
 
-**项目阶段**：第四阶段（功能完善）
+**项目阶段**：第四阶段（功能完善）已完成
 
-**版本**：v0.0.1
+**版本**：v0.2.0
 
 **日期**：2026-02-17
 
@@ -16,156 +16,102 @@
 
 本次对话完成了以下任务：
 
-1. ✅ 实现账号管理对话框（添加/编辑功能）
-2. ✅ 修复空账号池导致应用闪退的 Bug
-3. ✅ 修复 CSS 兼容性问题
-4. ✅ 完善对话框滚动功能
+1. ✅ 查看项目当前状态
+2. ✅ 修复 config 目录被 git 追踪的安全问题
+3. ✅ 创建配置模板文件
+4. ✅ 提交更改
 
 ## 工作内容
 
-### 1. 账号管理对话框实现
+### 1. 安全修复：移除敏感配置的 git 追踪
 
-**新增对话框模块**：
-- `src/ui/dialogs/__init__.py` - 模块导出
-- `src/ui/dialogs/base_dialog.py` - 可复用的模态对话框基类
-- `src/ui/dialogs/account_dialog.py` - 账号添加/编辑对话框
+**问题发现**：
+- `config/accounts.yaml` 包含用户 API 密钥等敏感信息，但被 git 追踪
+- `config/default_config.yaml` 用户配置也被追踪
 
-**功能特性**：
-- 支持 `add`（添加）和 `edit`（编辑）两种模式
-- 表单字段：账号ID、UID、API Key（密码掩码）、API URL（可选）
-- 表单验证：必填字段检查、ID格式校验
-- 编辑模式下预填充现有数据，ID字段禁用
-- ESC键关闭支持
+**解决方案**：
+- 更新 `.gitignore`，添加 `/config/` 忽略规则
+- 使用 `git rm --cached` 从追踪中移除 config 目录
+- 创建 `templates/config/` 目录存放配置模板
+- 模板文件（.example）供新用户参考，不包含敏感数据
 
-**集成到 AccountsContent**：
-- `_handle_add()`: 弹出添加对话框
-- `_handle_edit()`: 弹出编辑对话框
-- 添加操作回滚机制（保存失败时恢复状态）
+### 2. .gitignore 路径匹配问题修复
 
-### 2. Bug 修复
+**问题**：初始的 `config/` 规则会匹配任何包含 `config/` 的路径（如 `templates/config/`）
 
-#### 2.1 CSS 兼容性问题
-**问题**：Textual 不支持 `border-radius` 和 `box-shadow` CSS 属性
-**修复**：移除这些属性，保留基础样式
-
-#### 2.2 空账号池闪退问题
-**问题**：`AccountPool.__init__` 强制要求至少有一个账号，导致新用户无法进入应用
-**修复**：移除初始化时的强制验证，保留 `get_next_account()` 中的延迟验证
-
-#### 2.3 YAML 序列化问题
-**问题**：枚举值序列化为 Python 特定标签，导致无法重新加载
-**修复**：使用 `model_dump(mode='json')` + `yaml.safe_dump()`
-
-#### 2.4 对话框滚动问题
-**问题**：对话框内容可能超出可视区域
-**修复**：添加 `overflow-y: auto` 支持垂直滚动
-
-### 3. 数据持久化改进
-
-所有账号操作（添加/编辑/删除/启用/禁用）都会：
-1. 修改内存状态
-2. 保存到 `config/accounts.yaml`
-3. 失败时自动回滚
+**解决**：改为 `/config/` 只匹配根目录下的 config 目录
 
 ## 交付物
 
-### 新增文件（3个）
+### 新增文件
 
 | 文件 | 说明 |
 |------|------|
-| `src/ui/dialogs/__init__.py` | 对话框模块导出 |
-| `src/ui/dialogs/base_dialog.py` | 可复用对话框基类 |
-| `src/ui/dialogs/account_dialog.py` | 账号添加/编辑对话框 |
+| `templates/config/accounts.yaml.example` | 账号配置模板 |
+| `templates/config/default_config.yaml.example` | 默认配置模板 |
 
-### 修改文件（2个）
+### 修改文件
 
 | 文件 | 说明 |
 |------|------|
-| `src/core/account_pool.py` | 修复 YAML 序列化、移除空账号池验证 |
-| `src/ui/widgets/contents/accounts_content.py` | 集成对话框、添加回滚机制 |
+| `.gitignore` | 添加 `/config/` 忽略规则 |
+
+### 删除文件（从 git 追踪中移除）
+
+| 文件 | 说明 |
+|------|------|
+| `config/accounts.yaml` | 用户账号配置（本地保留） |
+| `config/default_config.yaml` | 用户默认配置（本地保留） |
 
 ## Git 状态
 
 **分支**：master
 
-**本次提交文件**：
-- `src/ui/dialogs/` (新增目录)
-- `src/core/account_pool.py`
-- `src/ui/widgets/contents/accounts_content.py`
+**最新提交**：`78d3719 fix: 将用户配置从 git 追踪中移除`
 
-**不提交文件**：
-- `config/accounts.yaml` (用户配置文件)
-- `.claude/` 下的临时文件
+**本地状态**：领先远程 7 个提交
 
 ## 状态变动
 
 ### 版本变化
-- 版本号保持不变：v0.0.1
+- 版本号保持不变：v0.2.0
 
 ### 项目阶段
-- 从第三阶段进入第四阶段（功能完善）
-
-### 功能完成
-- ✅ 账号管理 - 添加账号对话框
-- ✅ 账号管理 - 编辑账号对话框
-- ✅ 所有账号操作按钮（添加/编辑/删除/启用/禁用/刷新）已实现
+- 保持第四阶段（功能完善）已完成状态
 
 ## 工具
 
 ### 主要工具
 - **Read/Edit**：文件读写和编辑
-- **Codex**：代码审查，发现原子性问题
-- **Bash**：语法验证和测试
+- **Bash**：git 操作（rm --cached, add, commit）
+- **Grep**：搜索 .gitignore 规则
 
 ### 技术要点
 
-#### Textual ModalScreen
-- 使用 `ModalScreen` 实现模态对话框
-- 通过 `push_screen(callback=...)` 处理对话框结果
+#### git rm --cached
+- 从 git 索引中移除文件，但保留本地文件
+- 适用于敏感文件已被追踪后的修复
 
-#### 数据操作原子性
-- 先修改内存，再持久化
-- 失败时回滚内存变更
-
-#### YAML 序列化
-- 使用 `model_dump(mode='json')` 确保枚举值转为字符串
-- 使用 `yaml.safe_dump()` 避免 Python 特定标签
+#### .gitignore 路径规则
+- `config/` 匹配任何位置的 config 目录
+- `/config/` 只匹配根目录下的 config 目录
 
 ## 下一步建议
 
-### 优先任务
-1. 实现日志查看器组件
-2. 添加快捷键支持
-3. 优化样式和颜色主题
-
-### 第五阶段预告
-- 集成下载 Worker 与控制按钮
-- 实现批量下载功能
-- 添加下载进度实时更新
+1. 推送本地提交到远程仓库
+2. 继续第五阶段：核心下载功能集成
 
 ## 总结
 
-本次会话完成了**第四阶段账号管理对话框功能**：
+本次会话完成了**安全配置修复**：
 
 ### 主要成果
-- ✅ 新增对话框模块（可复用架构）
-- ✅ 实现添加账号功能
-- ✅ 实现编辑账号功能
-- ✅ 修复多个 Bug（CSS、序列化、空账号池）
-- ✅ 添加操作回滚机制
-
-### 账号管理页面状态
-| 按钮 | 状态 |
-|------|------|
-| 添加 | ✅ 已实现 |
-| 编辑 | ✅ 已实现 |
-| 删除 | ✅ 已实现 |
-| 启用 | ✅ 已实现 |
-| 禁用 | ✅ 已实现 |
-| 刷新 | ✅ 已实现 |
+- ✅ 敏感配置文件不再被 git 追踪
+- ✅ 创建配置模板供新用户参考
+- ✅ 修复 .gitignore 路径匹配问题
+- ✅ 提交更改
 
 ---
 
 **工作人员**：Claude Code
-**审核状态**：待审核
-**推送准备**：待提交
+**审核状态**：已完成

@@ -5,7 +5,6 @@
 """
 
 import uuid
-from pathlib import Path
 from typing import Any, Dict, List, Literal, Optional
 
 from src.core.config import DownloadConfig
@@ -189,7 +188,7 @@ class TaskService:
             "times": list(api_params.get("time", [])) or None,
             "pressure_levels": pressure_levels,
             "area": api_params.get("area"),
-            "output_path": Path(request.output_path),
+            "output_path": str(request.output_path),
             "product_type": api_params.get("product_type", "reanalysis"),
             "grid": api_params.get("grid", [2.5, 2]),
             "data_format": api_params.get("data_format", "netcdf"),

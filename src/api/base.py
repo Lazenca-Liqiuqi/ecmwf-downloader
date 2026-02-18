@@ -6,7 +6,7 @@ API客户端抽象基类
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 
 class BaseAPIClient(ABC):
@@ -43,7 +43,7 @@ class BaseAPIClient(ABC):
         times: Optional[List[str]] = None,
         pressure_levels: Optional[List[int]] = None,
         area: Optional[List[float]] = None,
-        output_path: Optional[Path] = None,
+        output_path: Optional[Union[Path, str]] = None,
         **kwargs,
     ) -> Path:
         """下载数据到本地文件

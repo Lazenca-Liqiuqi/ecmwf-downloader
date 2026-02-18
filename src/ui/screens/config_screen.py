@@ -207,7 +207,7 @@ class ConfigScreen(BaseScreen):
 
         # 设置输出路径
         output_path = Path(config.output_dir) / filename
-        download_params["output_path"] = output_path
+        download_params["output_path"] = str(output_path)
 
         # 创建任务
         self.app.progress_manager.create_task(

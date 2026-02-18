@@ -13,6 +13,7 @@ from src.core.progress import TaskStatus
 from src.ui.widgets.task_table import TaskTable
 from src.ui.screens.base_screen import BaseScreen
 from src.ui.styles.theme import get_tasks_styles
+from src.ui.workers.download_worker import start_download_task
 
 
 class TasksScreen(BaseScreen):
@@ -56,6 +57,7 @@ class TasksScreen(BaseScreen):
 
             # 操作按钮区域
             with Horizontal(id="actions-container"):
+                yield Button("开始", id="btn-start", variant="default")
                 yield Button("重试", id="btn-retry", variant="default")
                 yield Button("取消", id="btn-cancel", variant="default")
                 yield Button("删除", id="btn-delete", variant="default")
@@ -124,6 +126,9 @@ class TasksScreen(BaseScreen):
             self._handle_filter(button_id.replace("filter-", ""))
 
         # 操作按钮
+        elif button_id == "btn-start":
+            self._handle_start()
+
         elif button_id == "btn-retry":
             self._handle_retry()
 
@@ -171,6 +176,27 @@ class TasksScreen(BaseScreen):
         self._load_tasks(
             status_filter=filter_type, search_text=search_input.value
         )
+
+    def _handle_start(self) -> None:
+        """处理开始下载操作"""
+        table = self.query_one("#tasks-table", TaskTable)
+        task_id = table.get_selected_task_id()
+
+        if task_id is None:
+            self.notify("请先选择一个任务", severity="warning")
+            return
+
+        task = self.app.progress_manager.get_task(task_id)
+        if task is None:
+            self.notify(f"任务 {task_id} 不存在", severity="error")
+            return
+
+        if task.status != TaskStatus.PENDING:
+            self.notify("只能开始待下载状态的任务", severity="warning")
+            return
+
+        start_download_task(self.app, task_id)
+        self.notify(f"已开始下载任务 {task_id}", severity="information")
 
     def _handle_retry(self) -> None:
         """处理重试操作"""

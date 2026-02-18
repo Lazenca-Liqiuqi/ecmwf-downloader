@@ -15,6 +15,7 @@ from textual.widget import Widget
 from textual.widgets import Button, Label
 
 from src.core.progress import TaskStatus
+from src.ui.workers.download_worker import start_download_task
 from src.ui.widgets.task_table import TaskTable
 
 if TYPE_CHECKING:
@@ -135,9 +136,10 @@ class TasksContent(Widget):
             # 任务表格
             yield TaskTable(id="tasks-table")
 
-            # 操作按钮区域（三个按钮）
+            # 操作按钮区域
             with Horizontal(id="actions-container"):
-                yield Button("重试", id="btn-retry", variant="default")
+                yield Button("开始", id="btn-start", variant="default")
+                yield Button("重试", id="btn-retry", variant="default", classes="-middle")
                 yield Button("取消", id="btn-cancel", variant="default", classes="-middle")
                 yield Button("删除", id="btn-delete", variant="default", classes="-last")
 
@@ -225,6 +227,9 @@ class TasksContent(Widget):
             self._handle_filter(button_id.replace("filter-", ""))
 
         # 操作按钮
+        elif button_id == "btn-start":
+            self._handle_start()
+
         elif button_id == "btn-retry":
             self._handle_retry()
 
@@ -316,6 +321,27 @@ class TasksContent(Widget):
 
         # 重新加载任务
         self._load_tasks(status_filter=filter_type)
+
+    def _handle_start(self) -> None:
+        """处理开始下载操作"""
+        table = self.query_one("#tasks-table", TaskTable)
+        task_id = table.get_selected_task_id()
+
+        if task_id is None:
+            self.notify("请先选择一个任务", severity="warning")
+            return
+
+        task = self._app_ref.progress_manager.get_task(task_id)
+        if task is None:
+            self.notify(f"任务 {task_id} 不存在", severity="error")
+            return
+
+        if task.status != TaskStatus.PENDING:
+            self.notify("只能开始待下载状态的任务", severity="warning")
+            return
+
+        start_download_task(self._app_ref, task_id)
+        self.notify(f"已开始下载任务 {task_id}", severity="information")
 
     def _handle_retry(self) -> None:
         """处理重试操作"""

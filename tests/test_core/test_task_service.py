@@ -84,6 +84,7 @@ class TestTaskService:
         assert task_metadata["priority"] == 10
         assert "download_params" in task_metadata
         assert "time_range" in task_metadata
+        assert isinstance(task_metadata["download_params"]["output_path"], str)
 
     def test_create_batch_tasks_month_strategy(
         self, task_service, sample_config, mock_progress_manager
@@ -148,6 +149,7 @@ class TestTaskService:
         assert create_kwargs["metadata"]["download_params"]["dataset"] == (
             DatasetType.ERA5_PRESSURE_LEVELS.value
         )
+        assert isinstance(create_kwargs["metadata"]["download_params"]["output_path"], str)
 
     def test_create_task_validation_failure(self, mock_progress_manager):
         """测试请求校验失败时抛出异常"""

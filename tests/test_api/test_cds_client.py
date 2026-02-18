@@ -416,6 +416,31 @@ class TestCDSClientDownload:
         mock_result.download.assert_called_once_with(str(output_path))
 
     @patch("src.api.cds_client.cdsapi.Client")
+    def test_download_accepts_string_output_path(
+        self, mock_client_class, cds_client, tmp_path
+    ):
+        """测试下载支持字符串输出路径"""
+        mock_client = MagicMock()
+        mock_client_class.return_value = mock_client
+
+        mock_result = MagicMock()
+        mock_result.download = MagicMock()
+        mock_client.retrieve.return_value = mock_result
+
+        output_path_str = str(tmp_path / "output-from-json.nc")
+        result = cds_client.download(
+            dataset="reanalysis-era5-pressure-levels",
+            variables=["temperature"],
+            years=[2023],
+            months=[1],
+            output_path=output_path_str,
+        )
+
+        assert result == Path(output_path_str)
+        mock_client.retrieve.assert_called_once()
+        mock_result.download.assert_called_once_with(output_path_str)
+
+    @patch("src.api.cds_client.cdsapi.Client")
     def test_download_creates_output_dir(self, mock_client_class, cds_client):
         """测试下载时自动创建输出目录"""
         mock_client = MagicMock()

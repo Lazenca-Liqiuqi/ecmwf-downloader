@@ -8,7 +8,7 @@ import os
 import socket
 import urllib3
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import cdsapi
 
@@ -116,7 +116,7 @@ class CDSClient(BaseAPIClient):
         times: Optional[List[str]] = None,
         pressure_levels: Optional[List[int]] = None,
         area: Optional[List[float]] = None,
-        output_path: Optional[Path] = None,
+        output_path: Optional[Union[Path, str]] = None,
         **kwargs,
     ) -> Path:
         """下载数据到本地文件
@@ -130,7 +130,7 @@ class CDSClient(BaseAPIClient):
             times: 时间点列表（可选，如 ["00:00", "12:00"]）
             pressure_levels: 气压层列表（可选，如 [500, 850, 1000]）
             area: 区域范围 [N, W, S, E]（可选）
-            output_path: 输出文件路径（可选，默认自动生成）
+            output_path: 输出文件路径（可选，支持Path或字符串，默认自动生成）
             **kwargs: 其他参数：
                 - grid: 网格分辨率 [dx, dy]（默认 [2.5, 2]）
                 - data_format: 数据格式（默认 "netcdf"）
@@ -158,6 +158,8 @@ class CDSClient(BaseAPIClient):
         # 生成输出文件路径
         if output_path is None:
             output_path = self._generate_output_path(dataset, years, months, variables)
+        elif isinstance(output_path, str):
+            output_path = Path(output_path)
 
         # 确保输出目录存在
         output_path.parent.mkdir(parents=True, exist_ok=True)

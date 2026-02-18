@@ -12,7 +12,6 @@ from textual.widgets import Button, Footer, Header, Label
 from src.core.config import AccountInfo, AccountStatus
 from src.core.exceptions import AccountPoolError
 from src.ui.screens.base_screen import BaseScreen
-from src.ui.styles.theme import get_accounts_styles
 from src.ui.widgets.account_table import AccountTable
 
 
@@ -28,8 +27,52 @@ class AccountsScreen(BaseScreen):
     # 屏幕名称（用于导航）
     NAME = "accounts"
 
-    # 账号管理专用样式
-    CSS = get_accounts_styles()
+    DEFAULT_CSS = """
+    AccountsScreen {
+        background: $bg;
+        color: $text;
+    }
+
+    #accounts-container {
+        width: 1fr;
+        height: 1fr;
+        padding: 1 2;
+        overflow-y: auto;
+    }
+
+    #accounts-title {
+        text-style: bold;
+        color: $accent;
+        margin: 0 0 1 0;
+    }
+
+    #table-section {
+        width: 1fr;
+        height: 1fr;
+        margin: 0 0 1 0;
+    }
+
+    #accounts-table {
+        width: 1fr;
+        height: 1fr;
+        min-height: 12;
+        margin: 0 0 1 0;
+    }
+
+    #actions-section {
+        width: 1fr;
+        height: auto;
+        margin: 0 0 1 0;
+    }
+
+    #actions-section Button {
+        width: 1fr;
+    }
+
+    #actions-section Button + Button {
+        margin-left: 1;
+    }
+    """
 
     def compose(self) -> Iterable:
         """构建账号管理 UI"""

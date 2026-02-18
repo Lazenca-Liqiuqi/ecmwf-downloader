@@ -148,8 +148,8 @@ class ConfigContent(Widget):
     }
 
     #btn-load-schema, #btn-save-config, #btn-load-config {
-        min-width: 0;
         width: auto;
+        min-width: 0;
         padding: 0 1;
     }
     """

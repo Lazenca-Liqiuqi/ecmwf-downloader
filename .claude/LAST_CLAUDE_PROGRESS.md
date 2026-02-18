@@ -14,80 +14,102 @@
 
 ## 工作任务
 
-本次对话完成了动态表单系统的 UI 优化和配置管理功能：
+本次对话完成了 TUI 界面的优化和问题修复：
 
 | # | 任务 | 负责者 | 状态 |
 |---|------|--------|------|
-| 1 | 修复区域范围字段渲染问题 | Claude Code | ✅ 完成 |
-| 2 | 修复 Checkbox 事件属性错误 | Claude Code | ✅ 完成 |
-| 3 | 去除输入框背景色 | Claude Code | ✅ 完成 |
-| 4 | 添加下拉选择+手动输入组合控件 | Claude Code | ✅ 完成 |
-| 5 | 实现选项排序和切换标记（+/-） | Claude Code | ✅ 完成 |
-| 6 | 添加配置保存/加载功能 | Claude Code | ✅ 完成 |
-| 7 | 优化 UI 布局和按钮宽度 | Claude Code | ✅ 完成 |
+| 1 | 精简项目目录结构 | Claude Code | ✅ 完成 |
+| 2 | 删除主题功能模块 | Codex | ✅ 完成 |
+| 3 | 修复页面切换问题 | Claude Code + Codex | ✅ 完成 |
+| 4 | 修复退出后终端卡住问题 | Codex | ✅ 完成 |
+| 5 | 优化按钮和输入框样式 | Claude Code | ✅ 完成 |
+| 6 | 配置页面改名为"创建任务" | Claude Code | ✅ 完成 |
 
 ## 工作内容
 
-### 1. 字段渲染修复
+### 1. 目录精简
 
-**问题**：`area` 字段（GEO_EXTENT 类型）在 compose 时报错
+- 删除 `frontend/` 空目录
+- 删除 `templates/` 目录（示例配置文件未被使用）
+- 清理 Python 缓存文件和测试临时目录
 
-**修复**：
-- 将 `with Horizontal(...):` 语法改为直接 `yield Horizontal(...)`
-- 添加初始隐藏 `global` 开关和 `area` 输入框的逻辑
+### 2. 删除主题功能
 
-### 2. Checkbox 事件修复
+- 删除 `src/ui/styles/theme.py`（24KB 主题文件）
+- 删除 `src/ui/styles/__init__.py`
+- 移除所有屏幕和组件中的主题导入
+- 在 `app.py` 中添加全局 CSS 变量和基础样式
 
-**问题**：`event.toggle_button` 属性不存在
+### 3. 修复页面切换问题
 
-**修复**：改为 `event.checkbox`
+**根因**：复用同一个 Widget 实例进行 remove/mount 导致 Textual 无法正确再次挂载
 
-### 3. 输入框样式优化
+**解决方案**：每次切换页面时创建新的 Widget 实例
 
-**修改**：
-- `dynamic_form_field.py`：`.field-input` 背景改为透明
-- `config_content.py`：`ConfigContent Input` 背景改为透明
-- `theme.py`：`Input:focus` 背景改为透明
-- `account_dialog.py`：`Input:disabled` 背景改为透明
+修改 `action_switch_page` 方法，从缓存实例改为按需创建：
+```python
+# 每次创建新的 Widget 实例
+content_widget = page_classes[page_id](app=self)
+```
 
-### 4. 组合控件（Select + Input）
+### 4. 修复退出问题
 
-**功能**：
-- 每个有可选值的字段同时显示下拉框和输入框
-- 下拉框用于快速选择，输入框用于显示和手动输入
-- 支持多选（追加）和单选（替换）
-- 选中后下拉框保持打开，可以继续选择
-- 已选中的值显示 `-` 前缀，未选中的显示 `+` 前缀
+- 添加 `action_quit` 异步方法
+- 实现 `_cleanup_before_exit` 清理逻辑
+- 取消 ContentArea 内部异步切换任务
+- 取消并等待 Textual workers 完成
+- 添加 `ContentArea.shutdown()` 方法
 
-### 5. 配置保存/加载功能
+### 5. 样式优化
 
-**功能**：
-- **保存**：弹出对话框输入名称，保存完整的字段定义（可选值、类型、已选值）
-- **读取**：弹出对话框选择配置文件，直接恢复完整表单（不需要 API）
-- 配置文件保存在 `./data/configs/` 目录
+**全局 CSS 变量**：
+```css
+$bg: #0b1220;
+$panel: #0f172a;
+$surface: #111c2f;
+$border: #24324a;
+$text: #e5e7eb;
+$primary: #3b82f6;
+$accent: #60a5fa;
+```
 
-### 6. area_group 互斥逻辑优化
+**按钮样式**：
+- 圆角边框：`border: round $border`
+- 透明背景：`background: transparent`
+- 紧凑尺寸：`height: 3; padding: 0 1`
 
-**修改**：
-- 选择 `global` 模式：隐藏 `global` 开关和 `area` 输入框
-- 选择 `area` 模式：隐藏 `global` 开关，显示 `area` 输入框
+**输入框样式**：
+- 透明背景
+- 圆角边框
+- 焦点时高亮边框
+
+### 6. 配置页面改名
+
+将"配置"页面改名为"创建任务"：
+- `app.py` 快捷键提示
+- `navigation_sidebar.py` 侧边栏导航
+- `home_screen.py` 首页按钮
 
 ## 交付物
 
-### 修改文件
+### 删除的文件
+
+| 文件 | 说明 |
+|------|------|
+| `src/ui/styles/theme.py` | 主题文件 |
+| `src/ui/styles/__init__.py` | 包初始化文件 |
+| `templates/config/*.yaml.example` | 示例配置 |
+| `frontend/` | 空目录 |
+
+### 修改的文件
 
 | 文件 | 修改内容 |
 |------|----------|
-| `src/ui/widgets/dynamic_form_field.py` | 组合控件、选项切换标记、CSS 样式 |
-| `src/ui/widgets/contents/config_content.py` | 配置保存/加载、按钮布局、互斥逻辑 |
-| `src/ui/styles/theme.py` | 输入框背景透明 |
-| `src/ui/dialogs/account_dialog.py` | 输入框背景透明 |
-
-### 新增功能
-
-- 下拉选择 + 手动输入组合控件
-- 选项 +/- 切换标记
-- 配置文件保存/加载（完整离线支持）
+| `src/ui/app.py` | 全局 CSS、页面切换逻辑、退出清理 |
+| `src/ui/widgets/content_area.py` | shutdown 方法 |
+| `src/ui/widgets/contents/*.py` | 异常处理、CSS 优化 |
+| `src/ui/screens/*.py` | 移除主题导入 |
+| `src/ui/widgets/navigation_sidebar.py` | 页面名称修改 |
 
 ## 状态变动
 
@@ -98,38 +120,40 @@
 - 版本号保持不变：v0.2.0
 
 ### 功能变化
-- 动态表单支持组合输入方式
-- 支持配置文件的完整保存和离线加载
+- 删除主题模块，使用内联全局 CSS
+- 页面切换改为每次创建新实例
+- 按钮和输入框样式优化（透明背景、圆角）
 
 ## 工具
 
 ### 主要工具
-- **Claude Code**：所有修改
+- **Claude Code**：目录清理、样式调整、问题修复
+- **Codex**：主题删除、CSS 补全、退出问题修复
 
 ### 技术栈
-- **Textual 7.5+**：TUI 框架，Select/Input/RadioSet/Checkbox 组件
-- **ecmwf-datastores-client 0.4.0**：ECMWF 官方 API 客户端
+- **Textual 7.5+**：TUI 框架
+- **Python 3.14**：运行环境
 
 ## 下一步建议
 
-1. 完善配置文件的导入导出功能
+1. 完善动态表单的字段验证
 2. 实现约束更新的实际调用
-3. 添加更多字段类型的支持
-4. 优化 UI 响应和错误处理
+3. 优化 UI 响应和错误处理
+4. 添加更多字段类型的支持
 
 ## 总结
 
-本次会话完成了**动态表单系统的 UI 优化和配置管理功能**：
+本次会话完成了 **TUI 界面优化和问题修复**：
 
 ### 主要成果
-- ✅ 修复字段渲染和事件处理问题
-- ✅ 优化输入框样式（透明背景）
-- ✅ 实现下拉选择+手动输入组合控件
-- ✅ 添加选项 +/- 切换标记
-- ✅ 实现配置文件保存/加载功能
-- ✅ 优化 UI 布局和按钮宽度
+- ✅ 精简项目目录结构
+- ✅ 删除主题模块，简化代码
+- ✅ 修复页面切换无法显示的问题
+- ✅ 修复退出后终端卡住的问题
+- ✅ 优化按钮和输入框样式
+- ✅ 配置页面改名为"创建任务"
 
 ---
 
-**工作人员**：Claude Code
+**工作人员**：Claude Code + Codex
 **审核状态**：已完成

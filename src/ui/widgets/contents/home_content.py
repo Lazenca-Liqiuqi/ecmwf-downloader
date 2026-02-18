@@ -72,6 +72,7 @@ class HomeContent(Widget):
         width: 1fr;
         height: auto;
         margin: 1 0;
+        gap: 1;
     }
 
     /* ═══════════════════════════════════════════════════════════════
@@ -80,14 +81,10 @@ class HomeContent(Widget):
     #home-container .stat-card {
         width: 1fr;
         height: auto;
-        border: solid $panel;
+        border: round $border;
         padding: 1;
-        margin: 0 0 0 0;
-        background: $panel 30%;
-    }
-
-    #home-container .stat-card:last-child {
-        margin-left: 1;
+        margin: 0;
+        background: $surface;
     }
 
     .card-title {
@@ -100,7 +97,7 @@ class HomeContent(Widget):
     .stat-item {
         text-align: left;
         text-style: none;
-        color: $text;
+        color: $text 90%;
         margin: 0;
     }
 
@@ -120,8 +117,7 @@ class HomeContent(Widget):
         width: 1fr;
         height: 1fr;
         min-height: 10;
-        border: solid $panel;
-        margin: 1 0 3 0;
+        margin: 1 0 2 0;
     }
     """
 
@@ -168,14 +164,17 @@ class HomeContent(Widget):
 
     def on_mount(self) -> None:
         """组件挂载时初始化"""
-        # 设置最近任务表格
-        self._setup_recent_table()
-        # 等布局完成后再按窗口宽度调整列宽
-        self.call_after_refresh(self._resize_recent_table_columns)
-        # 刷新统计数据
-        self.refresh_data()
-        # 注册进度观察者
-        self._register_progress_observer()
+        try:
+            # 设置最近任务表格
+            self._setup_recent_table()
+            # 等布局完成后再按窗口宽度调整列宽
+            self.call_after_refresh(self._resize_recent_table_columns)
+            # 刷新统计数据
+            self.refresh_data()
+            # 注册进度观察者
+            self._register_progress_observer()
+        except Exception as e:
+            self.log.warning(f"首页初始化失败（已忽略）: {e}")
 
     def on_resize(self, event: Resize) -> None:
         """窗口尺寸变化时，保持表格列宽占满可用空间"""

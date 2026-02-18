@@ -55,24 +55,18 @@ class AccountsContent(Widget):
     #accounts-table {
         width: 1fr;
         height: 1fr;
-        border: solid $panel;
-        margin: 1 0 3 0;
+        margin: 1 0 2 0;
     }
 
     #actions-section {
         width: 1fr;
         height: auto;
         margin: 1 0;
+        gap: 1;
     }
 
     #actions-section Button {
         width: 1fr;
-        margin: 0 0 0 0;
-    }
-
-    #actions-section Button.-middle,
-    #actions-section Button.-last {
-        margin-left: 1;
     }
     """
 
@@ -109,9 +103,12 @@ class AccountsContent(Widget):
 
     def on_mount(self) -> None:
         """组件挂载时初始化"""
-        # AccountTable 组件会在 on_mount 时自动初始化列
-        # 加载账号数据
-        self._load_accounts()
+        try:
+            # AccountTable 组件会在 on_mount 时自动初始化列
+            # 加载账号数据
+            self._load_accounts()
+        except Exception as e:
+            self.log.warning(f"账号页初始化失败（已忽略）: {e}")
 
     def _load_accounts(self) -> None:
         """加载账号数据到表格"""

@@ -12,7 +12,6 @@ from textual.widgets import Button, Footer, Header, Input, Label
 from src.core.config import DownloadConfig
 from src.core.progress import TaskStatus
 from src.ui.screens.base_screen import BaseScreen
-from src.ui.styles.theme import get_global_styles
 
 
 class ConfigScreen(BaseScreen):
@@ -27,8 +26,74 @@ class ConfigScreen(BaseScreen):
     # 屏幕名称（用于导航）
     NAME = "config"
 
-    # 使用全局样式
-    CSS = get_global_styles()
+    # 配置页样式：以全局控件样式为主，保留现有布局结构（仅补齐容器与分区视觉层次）
+    DEFAULT_CSS = """
+    ConfigScreen {
+        background: $bg;
+        color: $text;
+    }
+
+    #config-container {
+        width: 1fr;
+        height: 1fr;
+        padding: 1 2;
+        overflow-y: auto;
+    }
+
+    #config-title {
+        text-style: bold;
+        color: $accent;
+        margin: 0 0 1 0;
+    }
+
+    #dataset-section,
+    #variables-section,
+    #output-section {
+        width: 1fr;
+        height: auto;
+        background: $surface;
+        border: round $border;
+        padding: 1 1;
+        margin: 0 0 1 0;
+    }
+
+    #time-section,
+    #spatial-section {
+        width: 1fr;
+        height: auto;
+        margin: 0 0 1 0;
+    }
+
+    #years-container,
+    #months-container,
+    #area-container,
+    #levels-container {
+        width: 1fr;
+        height: auto;
+        background: $surface;
+        border: round $border;
+        padding: 1 1;
+    }
+
+    #months-container,
+    #levels-container {
+        margin-left: 1;
+    }
+
+    #actions-section {
+        width: 1fr;
+        height: auto;
+        margin: 0 0 1 0;
+    }
+
+    #actions-section Button {
+        width: 1fr;
+    }
+
+    #actions-section Button + Button {
+        margin-left: 1;
+    }
+    """
 
     def compose(self) -> Iterable:
         """构建配置管理 UI"""

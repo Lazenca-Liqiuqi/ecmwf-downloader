@@ -10,7 +10,6 @@ from textual.widgets import DataTable
 from textual.widgets._data_table import RowDoesNotExist
 
 from src.core.progress import TaskInfo, TaskStatus
-from src.ui.styles.theme import get_status_color
 
 
 class TaskTable(DataTable):

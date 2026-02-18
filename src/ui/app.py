@@ -5,14 +5,14 @@ ECMWF Downloader TUI 应用主入口
 采用侧边栏布局架构，包含导航侧边栏和内容区域。
 """
 
+import asyncio
+from contextlib import suppress
 from pathlib import Path
 from typing import Dict, Iterable, Optional, TYPE_CHECKING
 
 from textual.app import App
 from textual.containers import Horizontal
-from textual.widgets import Footer, Header
 
-from src.ui.styles.theme import get_global_styles
 from src.ui.widgets.content_area import ContentArea
 from src.ui.widgets.contents.accounts_content import AccountsContent
 from src.ui.widgets.contents.config_content import ConfigContent
@@ -48,7 +48,190 @@ class ECMWFDownloaderApp(App):
     TITLE = "ECMWF Downloader"
 
     # 全局 CSS 样式
-    CSS = get_global_styles()
+    CSS = """
+    /* =============================================================
+       主题变量（用于替代已删除主题文件中的变量）
+
+       说明：项目内多个组件 CSS 使用了 $bg/$surface/$border/$panel
+       等变量。如果这些变量未定义，Textual 会报“undefined variable”并
+       可能导致页面样式加载失败（进而出现页面空白/无法挂载）。
+       ============================================================= */
+    $bg: #0b1220;
+    $panel: #0f172a;
+    $panel-lighten-1: #172554;
+    $surface: #111c2f;
+    $border: #24324a;
+
+    $text: #e5e7eb;
+    $text-muted: #9ca3af;
+
+    $primary: #3b82f6;
+    $accent: #60a5fa;
+    $success: #22c55e;
+    $warning: #f59e0b;
+    $error: #ef4444;
+
+    /* =============================================================
+       基础布局
+       ============================================================= */
+    Screen {
+        background: $bg;
+        color: $text;
+    }
+
+    #app-body {
+        height: 1fr;
+    }
+
+    NavigationSidebar {
+        height: 1fr;
+    }
+
+    ContentArea {
+        height: 1fr;
+    }
+
+    #content-container {
+        background: $bg;
+    }
+
+    /* =============================================================
+       Header / Footer
+       ============================================================= */
+    Header {
+        background: $panel;
+        color: $text;
+        border-bottom: heavy $border;
+    }
+
+    Footer {
+        background: $panel;
+        color: $text-muted;
+        border-top: heavy $border;
+    }
+
+    /* =============================================================
+       容器与通用文本
+       ============================================================= */
+    .content-container {
+        width: 1fr;
+        height: 1fr;
+        padding: 1 2;
+    }
+
+    .page-title {
+        text-style: bold;
+        color: $accent;
+    }
+
+    .table-section {
+        width: 1fr;
+        height: 1fr;
+    }
+
+    /* =============================================================
+       按钮（圆角、紧凑、美观）
+       ============================================================= */
+    Button {
+        height: 3;
+        min-width: 8;
+        padding: 0 1;
+        margin: 0;
+        background: transparent;
+        color: $text;
+        border: round $border;
+    }
+
+    Button:hover {
+        background: $primary 15%;
+        border: round $primary;
+    }
+
+    Button:focus {
+        background: transparent;
+        border: round $accent;
+        text-style: bold;
+    }
+
+    Button.-primary {
+        background: transparent;
+        color: $text;
+        border: round $primary;
+        text-style: bold;
+    }
+
+    Button.-primary:hover {
+        background: $primary 15%;
+        border: round $primary;
+    }
+
+    Button.-primary:focus {
+        background: transparent;
+        border: round $accent;
+    }
+
+    Button:disabled {
+        background: transparent;
+        color: $text-muted;
+        border: round $border;
+    }
+
+    /* =============================================================
+       输入框
+       ============================================================= */
+    Input {
+        height: 3;
+        padding: 0 1;
+        border: round $border;
+        background: transparent;
+        color: $text;
+    }
+
+    Input:focus {
+        border: round $accent;
+    }
+
+    Input > .input--placeholder {
+        color: $text-muted;
+    }
+
+    Input.-invalid {
+        border: round $error;
+    }
+
+    /* =============================================================
+       表格（DataTable / TaskTable / AccountTable）
+       ============================================================= */
+    DataTable {
+        border: round $border;
+        background: transparent;
+        color: $text;
+    }
+
+    DataTable > .datatable--header {
+        background: $panel;
+        color: $text;
+        text-style: bold;
+    }
+
+    DataTable > .datatable--cursor {
+        background: $primary 35%;
+        color: $text;
+        text-style: bold;
+    }
+
+    DataTable > .datatable--hover {
+        background: $primary 15%;
+    }
+
+    DataTable > .datatable--even-row {
+        background: $surface;
+    }
+
+    DataTable > .datatable--odd-row {
+        background: $surface 90%;
+    }
+    """
 
     # 全局快捷键绑定
     # Textual的BINDINGS要求action必须是方法名，不能带参数
@@ -60,7 +243,7 @@ class ECMWFDownloaderApp(App):
         ("t", "go_tasks", "任务"),
         ("d", "go_download", "下载"),
         ("a", "go_accounts", "账号"),
-        ("c", "go_config", "配置"),
+        ("c", "go_config", "创建任务"),
     ]
 
     def __init__(
@@ -87,9 +270,6 @@ class ECMWFDownloaderApp(App):
         self._account_pool: Optional["AccountPool"] = None
         self._progress_manager: Optional["ProgressManager"] = None
 
-        # 内容Widget实例（在on_mount中初始化）
-        self._content_widgets: Dict[str, "HomeContent | TasksContent | DownloadContent | AccountsContent | ConfigContent"] = {}
-
         # 确保数据目录存在
         self._ensure_data_dir()
 
@@ -106,7 +286,7 @@ class ECMWFDownloaderApp(App):
         - 左侧：NavigationSidebar（导航菜单）
         - 右侧：ContentArea（内容区域，已包含Header和Footer）
         """
-        with Horizontal():
+        with Horizontal(id="app-body"):
             yield NavigationSidebar()
             yield ContentArea(id="main-content")
 
@@ -121,21 +301,7 @@ class ECMWFDownloaderApp(App):
         self.log.info(f"账号配置: {self._accounts_path}")
         self.log.info(f"进度文件: {self._progress_path}")
 
-        # 初始化所有内容Widget
-        self._content_widgets = {
-            "home": HomeContent(app=self),
-            "tasks": TasksContent(app=self),
-            "download": DownloadContent(app=self),
-            "accounts": AccountsContent(app=self),
-            "config": ConfigContent(app=self),
-        }
-        self.log.info(f"内容Widget已初始化: {list(self._content_widgets.keys())}")
-
-        # 检查Widget是否可访问
-        for page_id, widget in self._content_widgets.items():
-            self.log.info(f"Widget {page_id}: {widget.__class__.__name__}, app={widget.app}")
-
-        # 显示首页
+        # 显示首页（每次切换都会创建新的 Widget 实例）
         self.action_switch_page("home")
 
         # 设置初始焦点在侧边栏
@@ -158,9 +324,20 @@ class ECMWFDownloaderApp(App):
         """切换当前显示的页面（同步入口）
 
         兼容测试与同步调用方；实际的 mount/remove 在 ContentArea 内部异步执行。
+
+        注意：每次切换都创建新的 Widget 实例，避免 Textual 中复用已卸载组件的问题。
         """
+        # 页面 Widget 类映射
+        page_classes = {
+            "home": HomeContent,
+            "tasks": TasksContent,
+            "download": DownloadContent,
+            "accounts": AccountsContent,
+            "config": ConfigContent,
+        }
+
         # 验证page_id
-        if page_id not in self._content_widgets:
+        if page_id not in page_classes:
             self.log.error(f"无效的页面ID: {page_id}")
             return
 
@@ -171,10 +348,11 @@ class ECMWFDownloaderApp(App):
         except Exception as e:
             self.log.warning(f"更新侧边栏状态失败: {e}")
 
-        # 切换内容区域
+        # 切换内容区域 - 每次创建新实例
         try:
             content_area = self.query_one("#main-content", ContentArea)
-            content_widget = self._content_widgets[page_id]
+            # 每次创建新的 Widget 实例，避免复用已卸载组件的问题
+            content_widget = page_classes[page_id](app=self)
             content_area.switch_content(content_widget)
             self.log.info(f"页面已切换到: {page_id}")
         except Exception as e:
@@ -247,8 +425,54 @@ class ECMWFDownloaderApp(App):
 
         # 保存进度
         if self._progress_manager is not None:
-            self._progress_manager.save()
-            self.log.info("进度已保存")
+            try:
+                self._progress_manager.save()
+                self.log.info("进度已保存")
+            except Exception as e:
+                # 退出阶段不可抛异常，否则可能导致终端状态无法恢复
+                self.log.error(f"保存进度失败（已忽略）: {e}")
+
+    async def action_quit(self) -> None:
+        """退出应用（带清理）
+
+        处理：
+        - 取消 ContentArea 内部异步切换任务（避免退出时遗留 pending task）
+        - 取消并等待 Textual workers（避免后台线程/任务阻塞退出）
+        - 尝试保存进度（失败不影响退出）
+        """
+        # 先做最佳努力清理，避免异常中断退出流程
+        try:
+            await self._cleanup_before_exit()
+        except Exception as e:
+            self.log.error(f"退出清理异常（已忽略）: {e}")
+
+        self.exit()
+
+    async def _cleanup_before_exit(self) -> None:
+        """退出前清理资源（不抛异常）"""
+        # 1) 停止内容区域的异步切换任务
+        try:
+            content_area = self.query_one("#main-content", ContentArea)
+            await content_area.shutdown()
+        except Exception as e:
+            self.log.warning(f"清理内容区域失败（已忽略）: {e}")
+
+        # 2) 取消并等待 Textual workers（含 @work(thread=True)）
+        try:
+            self.workers.cancel_all()
+            with suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(
+                    self.workers.wait_for_complete(), timeout=1.0
+                )
+        except Exception as e:
+            self.log.warning(f"清理后台任务失败（已忽略）: {e}")
+
+        # 3) 保存进度（失败不影响退出）
+        if self._progress_manager is not None:
+            try:
+                self._progress_manager.save()
+            except Exception as e:
+                self.log.error(f"退出前保存进度失败（已忽略）: {e}")
 
 
 # 创建应用的便捷函数（供 __main__.py 使用）

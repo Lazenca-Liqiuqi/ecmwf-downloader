@@ -8,11 +8,13 @@ ECMWF Downloader TUI 内容区域组件
 from typing import Iterable, Optional
 
 import asyncio
+from contextlib import suppress
 
 from textual.containers import Container, Vertical
 from textual.events import Key
 from textual.widget import Widget
 from textual.widgets import Header
+from textual.worker import Worker
 
 
 class ContentArea(Vertical):
@@ -52,7 +54,27 @@ class ContentArea(Vertical):
         super().__init__(**kwargs)
         self._current_content_widget: Optional[Widget] = None
         self._switch_serial = 0
-        self._switch_task: Optional[asyncio.Task] = None
+        self._switch_worker: Optional[Worker] = None
+
+    async def shutdown(self) -> None:
+        """退出前清理 ContentArea 内部异步任务与内容。
+
+        说明：ContentArea 使用 asyncio.create_task 执行页面 mount/remove。
+        若退出时仍有 pending task，可能触发“Task was destroyed but it is pending”
+        或导致事件循环/终端状态清理异常。
+        """
+        # 取消正在进行的内容切换 worker（使用 Textual WorkerManager，确保退出可清理）
+        if self._switch_worker is not None and self._switch_worker.is_running:
+            self._switch_worker.cancel()
+            with suppress(asyncio.CancelledError):
+                with suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(self._switch_worker.wait(), timeout=1.0)
+        self._switch_worker = None
+
+        # 退出阶段交给 Textual 完成 DOM 的最终卸载；这里只清理本组件内部状态，
+        # 避免 remove_children 在退出时触发额外的 DOM 操作而导致卡住。
+        self._current_content_widget = None
+        self._switch_serial += 1
 
     def compose(self) -> Iterable:
         """构建内容区域UI"""
@@ -64,17 +86,25 @@ class ContentArea(Vertical):
     def switch_content(self, content_widget: Widget) -> None:
         """切换内容区域显示的 Widget（同步入口）
 
-        为兼容测试与同步调用方，此方法不返回 coroutine；实际的 mount/remove
-        在后台异步执行（Textual 7+ 需要 await）。
+        说明：Textual 7+ 的 mount/remove 是异步的，这里使用 Textual 的 Worker
+        系统托管切换逻辑，避免自行 create_task 导致退出清理困难。
         """
         self._current_content_widget = content_widget
         self._switch_serial += 1
         serial = self._switch_serial
 
         def _schedule() -> None:
-            if self._switch_task is not None and not self._switch_task.done():
-                self._switch_task.cancel()
-            self._switch_task = asyncio.create_task(self._apply_content(serial))
+            # 取消旧的切换 worker
+            if self._switch_worker is not None and self._switch_worker.is_running:
+                self._switch_worker.cancel()
+            # exclusive=True 确保同组只跑一个（减少并发 DOM 操作）
+            self._switch_worker = self.run_worker(
+                self._apply_content(serial),
+                name="content-switch",
+                group="content-switch",
+                exclusive=True,
+                exit_on_error=False,
+            )
 
         self.call_after_refresh(_schedule)
 
@@ -88,9 +118,15 @@ class ContentArea(Vertical):
         serial = self._switch_serial
 
         def _schedule() -> None:
-            if self._switch_task is not None and not self._switch_task.done():
-                self._switch_task.cancel()
-            self._switch_task = asyncio.create_task(self._apply_content(serial))
+            if self._switch_worker is not None and self._switch_worker.is_running:
+                self._switch_worker.cancel()
+            self._switch_worker = self.run_worker(
+                self._apply_content(serial),
+                name="content-clear",
+                group="content-switch",
+                exclusive=True,
+                exit_on_error=False,
+            )
 
         self.call_after_refresh(_schedule)
 
@@ -117,6 +153,9 @@ class ContentArea(Vertical):
                 )
             else:
                 self.log.info("内容区域已清空")
+        except asyncio.CancelledError:
+            # 切换被取消（例如快速切页/退出），不记录为异常
+            return
         except Exception as e:
             self.log.warning(f"应用内容区域变更失败: {e}")
             return

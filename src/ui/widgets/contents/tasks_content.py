@@ -58,22 +58,11 @@ class TasksContent(Widget):
         width: 1fr;
         height: auto;
         margin: 1 0;
+        gap: 1;
     }
 
     #filter-container Button {
         width: 1fr;
-        margin: 0 0 0 0;
-    }
-
-    #filter-container Button.-middle,
-    #filter-container Button.-last {
-        margin-left: 1;
-    }
-
-    #filter-container Button.-active {
-        border: solid $accent;
-        text-style: bold;
-        color: $accent;
     }
 
     /* ═══════════════════════════════════════════════════════════════
@@ -82,8 +71,7 @@ class TasksContent(Widget):
     #tasks-container #tasks-table {
         width: 1fr;
         height: 1fr;
-        border: solid $panel;
-        margin: 1 0 3 0;
+        margin: 1 0 2 0;
     }
 
     /* ═══════════════════════════════════════════════════════════════
@@ -93,16 +81,11 @@ class TasksContent(Widget):
         width: 1fr;
         height: auto;
         margin: 1 0;
+        gap: 1;
     }
 
     #tasks-container #actions-container Button {
         width: 1fr;
-        margin: 0 0 0 0;
-    }
-
-    #tasks-container #actions-container Button.-middle,
-    #tasks-container #actions-container Button.-last {
-        margin-left: 1;
     }
     """
 

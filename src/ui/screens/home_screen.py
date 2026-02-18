@@ -11,7 +11,6 @@ from textual.css.query import NoMatches
 from textual.widgets import Button, DataTable, Header, Footer, Label
 
 from src.ui.screens.base_screen import BaseScreen
-from src.ui.styles.theme import get_home_styles, get_status_css_class
 
 
 class HomeScreen(BaseScreen):
@@ -26,9 +25,6 @@ class HomeScreen(BaseScreen):
 
     # 屏幕名称（用于导航）
     NAME = "home"
-
-    # 首页专用样式（与全局样式合并）
-    CSS = get_home_styles()
 
     def compose(self) -> Iterable:
         """构建首页 UI"""
@@ -61,7 +57,7 @@ class HomeScreen(BaseScreen):
                 yield Button("任务列表", id="btn-tasks", variant="default")
                 yield Button("下载管理", id="btn-download", variant="default")
                 yield Button("账号管理", id="btn-accounts", variant="default")
-                yield Button("配置管理", id="btn-config", variant="default")
+                yield Button("创建任务", id="btn-config", variant="default")
 
             # 最近任务区域
             yield Label("最近任务", id="recent-title")

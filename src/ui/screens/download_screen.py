@@ -11,7 +11,6 @@ from textual.widgets import Button, Footer, Header, Label, ProgressBar
 
 from src.core.progress import TaskStatus
 from src.ui.screens.base_screen import BaseScreen
-from src.ui.styles.theme import get_download_styles
 from src.ui.widgets.task_table import TaskTable
 
 
@@ -27,8 +26,89 @@ class DownloadScreen(BaseScreen):
     # 屏幕名称（用于导航）
     NAME = "download"
 
-    # 下载管理专用样式
-    CSS = get_download_styles()
+    DEFAULT_CSS = """
+    DownloadScreen {
+        background: $bg;
+        color: $text;
+    }
+
+    #download-container {
+        width: 1fr;
+        height: 1fr;
+        padding: 1 2;
+        overflow-y: auto;
+    }
+
+    #download-title {
+        text-style: bold;
+        color: $accent;
+        margin: 0 0 1 0;
+    }
+
+    #progress-section {
+        width: 1fr;
+        height: auto;
+        background: $surface;
+        border: round $border;
+        padding: 1 1;
+        margin: 0 0 1 0;
+    }
+
+    #progress-label {
+        text-style: bold;
+        color: $text;
+        margin: 0 0 1 0;
+    }
+
+    #overall-progress {
+        width: 1fr;
+        margin: 0 0 1 0;
+    }
+
+    #progress-stats {
+        width: 1fr;
+        height: auto;
+    }
+
+    #progress-stats Label {
+        width: 1fr;
+        text-align: center;
+        color: $text-muted;
+    }
+
+    #active-tasks-section {
+        width: 1fr;
+        height: 1fr;
+        margin: 0 0 1 0;
+    }
+
+    #active-label {
+        text-style: bold;
+        color: $accent;
+        margin: 0 0 1 0;
+    }
+
+    #active-table {
+        width: 1fr;
+        height: 1fr;
+        min-height: 10;
+        margin: 0 0 1 0;
+    }
+
+    #control-section {
+        width: 1fr;
+        height: auto;
+        margin: 0 0 1 0;
+    }
+
+    #control-section Button {
+        width: 1fr;
+    }
+
+    #control-section Button + Button {
+        margin-left: 1;
+    }
+    """
 
     def compose(self) -> Iterable:
         """构建下载管理 UI"""

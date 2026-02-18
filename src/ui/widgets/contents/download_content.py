@@ -59,10 +59,10 @@ class DownloadContent(Widget):
     #download-container #progress-card {
         width: 1fr;
         height: auto;
-        border: solid $panel;
+        border: round $border;
         padding: 1 0;
         margin: 1 0;
-        background: $panel 30%;
+        background: $surface;
     }
 
     /* 第一行：标签 + 进度条 */
@@ -70,6 +70,7 @@ class DownloadContent(Widget):
         width: 1fr;
         height: auto;
         padding: 0 1;
+        gap: 1;
     }
 
     #download-container #progress-label {
@@ -90,20 +91,13 @@ class DownloadContent(Widget):
         width: 1fr;
         height: auto;
         padding: 0 1;
+        gap: 1;
     }
 
     #download-container .stat-item {
         width: 1fr;
         text-align: center;
         margin: 0;
-    }
-
-    /* Textual CSS 不支持复杂 :not() 选择器，改为显式 ID 选择器 */
-    #download-container #stat-downloading,
-    #download-container #stat-completed,
-    #download-container #stat-pending,
-    #download-container #stat-failed {
-        margin-left: 1;
     }
 
     #download-container .stat-value {
@@ -130,7 +124,6 @@ class DownloadContent(Widget):
     #download-container #active-table {
         width: 1fr;
         height: 1fr;
-        border: solid $panel;
         margin: 1 0 0 0;
     }
 
@@ -141,16 +134,11 @@ class DownloadContent(Widget):
         width: 1fr;
         height: auto;
         margin: 1 0 0 0;
+        gap: 1;
     }
 
     #download-container #control-section Button {
         width: 1fr;
-        margin: 0;
-    }
-
-    #download-container #control-section Button.-middle,
-    #download-container #control-section Button.-last {
-        margin-left: 1;
     }
     """
 

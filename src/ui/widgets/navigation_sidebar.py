@@ -139,7 +139,7 @@ class NavigationSidebar(Vertical):
         {"id": "tasks", "label": "T 任务", "key": "t"},
         {"id": "download", "label": "D 下载", "key": "d"},
         {"id": "accounts", "label": "A 账号", "key": "a"},
-        {"id": "config", "label": "C 配置", "key": "c"},
+        {"id": "config", "label": "C 创建任务", "key": "c"},
     ]
 
     # 当前页面（reactive变量，会自动触发界面更新）

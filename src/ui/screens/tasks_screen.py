@@ -12,7 +12,6 @@ from textual.widgets import Button, Header, Footer, Input, Label
 from src.core.progress import TaskStatus
 from src.ui.widgets.task_table import TaskTable
 from src.ui.screens.base_screen import BaseScreen
-from src.ui.styles.theme import get_tasks_styles
 from src.ui.workers.download_worker import start_download_task
 
 
@@ -29,8 +28,72 @@ class TasksScreen(BaseScreen):
     # 屏幕名称（用于导航）
     NAME = "tasks"
 
-    # 任务列表专用样式
-    CSS = get_tasks_styles()
+    DEFAULT_CSS = """
+    TasksScreen {
+        background: $bg;
+        color: $text;
+    }
+
+    #tasks-container {
+        width: 1fr;
+        height: 1fr;
+        padding: 1 2;
+        overflow-y: auto;
+    }
+
+    #tasks-header {
+        width: 1fr;
+        height: auto;
+        align: left middle;
+        margin: 0 0 1 0;
+    }
+
+    #tasks-title {
+        width: auto;
+        text-style: bold;
+        color: $accent;
+        margin-right: 2;
+    }
+
+    #search-input {
+        width: 1fr;
+    }
+
+    #filter-container {
+        width: 1fr;
+        height: auto;
+        margin: 0 0 1 0;
+    }
+
+    #filter-container Button {
+        width: 1fr;
+    }
+
+    #filter-container Button + Button {
+        margin-left: 1;
+    }
+
+    #tasks-table {
+        width: 1fr;
+        height: 1fr;
+        min-height: 12;
+        margin: 0 0 1 0;
+    }
+
+    #actions-container {
+        width: 1fr;
+        height: auto;
+        margin: 0 0 1 0;
+    }
+
+    #actions-container Button {
+        width: 1fr;
+    }
+
+    #actions-container Button + Button {
+        margin-left: 1;
+    }
+    """
 
     def compose(self) -> Iterable:
         """构建任务列表 UI"""

@@ -14,7 +14,7 @@ from typing import Any, Dict, Iterable, List, Literal, Optional
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.events import Key
 from textual.widget import Widget
-from textual.widgets import Button, Input, Label, RadioButton, RadioSet, Static
+from textual.widgets import Button, Input, Label, RadioButton, RadioSet, Select, Static
 
 from src.core.config import DownloadConfig
 from src.core.dataset_schema import DynamicFormState, DynamicFormField
@@ -59,7 +59,7 @@ class ConfigContent(Widget):
         height: auto;
         min-height: 1;
         border: round $panel;
-        background: $surface;
+        background: transparent;
         color: $text;
     }
 
@@ -147,8 +147,10 @@ class ConfigContent(Widget):
         border-top: solid $panel;
     }
 
-    #btn-load-schema {
-        min-width: 15;
+    #btn-load-schema, #btn-save-config, #btn-load-config {
+        min-width: 0;
+        width: auto;
+        padding: 0 1;
     }
     """
 
@@ -171,6 +173,9 @@ class ConfigContent(Widget):
 
         # 是否正在加载
         self._is_loading = False
+
+        # 待恢复的字段值（从配置文件加载后使用）
+        self._pending_field_values: Dict[str, List[Any]] = {}
 
     def _get_datastores_service(self) -> DatastoresService:
         """获取或创建 Datastores 服务实例"""
@@ -196,7 +201,9 @@ class ConfigContent(Widget):
                         id="input-dataset",
                         value="reanalysis-era5-pressure-levels",
                     )
-                    yield Button("加载 Schema", id="btn-load-schema", variant="primary")
+                    yield Button("加载配置", id="btn-load-schema", variant="primary")
+                    yield Button("保存", id="btn-save-config", variant="default")
+                    yield Button("读取", id="btn-load-config", variant="default")
                 yield Label("输入数据集 ID 后点击加载", id="schema-status")
 
             # 动态表单区域（初始为空）
@@ -241,6 +248,12 @@ class ConfigContent(Widget):
 
         if button_id == "btn-load-schema":
             await self._handle_load_schema()
+
+        elif button_id == "btn-save-config":
+            self._handle_save_config()
+
+        elif button_id == "btn-load-config":
+            self._handle_load_config_file()
 
         elif button_id == "btn-preview":
             await self._handle_preview()
@@ -308,6 +321,36 @@ class ConfigContent(Widget):
 
             container.render_fields(self._form_state.fields)
 
+            # 恢复从配置文件加载的字段值
+            if self._pending_field_values:
+                for field_name, values in self._pending_field_values.items():
+                    if field_name in self._form_state.fields:
+                        self._form_state.set_field_selection(field_name, values)
+                        widget = container.get_field_widget(field_name)
+                        if widget:
+                            widget.set_selected_values(values)
+                # 清空待恢复的值
+                self._pending_field_values = {}
+
+            # 初始化 area_group 相关字段的显示状态
+            # 默认 area_group = global，所以隐藏 global 开关和 area 输入框
+            area_group = self._form_state.fields.get("area_group")
+            if area_group and area_group.selected:
+                mode = str(area_group.selected[0]).strip().lower()
+                global_widget = container.get_field_widget("global")
+                area_widget = container.get_field_widget("area")
+
+                if mode == "global":
+                    # 默认 global 模式：隐藏 global 开关和 area 输入框
+                    if global_widget:
+                        global_widget.display = False
+                    if area_widget:
+                        area_widget.display = False
+                elif mode == "area":
+                    # area 模式：隐藏 global 开关
+                    if global_widget:
+                        global_widget.display = False
+
             # 刷新布局
             container.refresh(layout=True)
             self.refresh(layout=True)
@@ -342,10 +385,10 @@ class ConfigContent(Widget):
         # 更新表单状态
         self._form_state.set_field_selection(event.field_name, event.selected_values)
 
-        # 特殊互斥逻辑：area_group 通常用于在 global/area 两种模式间切换
+        # 特殊互斥逻辑：area_group 用于在 global/area 两种模式间切换
         # 规则（仅在相关字段存在时生效）：
-        # - 选择 global：自动开启 global 开关并禁用/清空 area
-        # - 选择 area：关闭 global 并启用 area
+        # - 选择 global：隐藏 global 开关和 area 输入框（选了就是全球范围）
+        # - 选择 area：隐藏 global 开关，显示 area 输入框
         if event.field_name == "area_group" and event.selected_values:
             mode = str(event.selected_values[0]).strip().lower()
             try:
@@ -354,20 +397,23 @@ class ConfigContent(Widget):
                 area_widget = container.get_field_widget("area")
 
                 if mode == "global":
+                    # 选了 global 模式：隐藏 global 开关和 area 输入框
                     if global_widget:
-                        global_widget.disabled = False
                         global_widget.set_selected_values(["true"])
                         self._form_state.set_field_selection("global", ["true"])
+                        global_widget.display = False
                     if area_widget:
                         area_widget.set_selected_values([])
                         self._form_state.set_field_selection("area", [])
-                        area_widget.disabled = True
+                        area_widget.display = False
                 elif mode == "area":
+                    # 选了 area 模式：隐藏 global 开关，显示 area 输入框
                     if global_widget:
                         global_widget.set_selected_values([])
                         self._form_state.set_field_selection("global", [])
-                        global_widget.disabled = True
+                        global_widget.display = False
                     if area_widget:
+                        area_widget.display = True
                         area_widget.disabled = False
             except Exception:
                 # 互斥增强逻辑不应影响主流程
@@ -528,9 +574,286 @@ class ConfigContent(Widget):
 
         # 重置拆分策略
         strategy_set = self.query_one("#split-strategy-set", RadioSet)
-        strategy_set.pressed_index = 0
+        buttons = list(strategy_set.query(RadioButton))
+        for i, btn in enumerate(buttons):
+            btn.value = (i == 0)
 
         self._update_task_count(0)
+
+    def _handle_save_config(self) -> None:
+        """保存当前配置到文件（弹出输入框让用户输入名称）"""
+        from textual.screen import ModalScreen
+        from textual.containers import Vertical, Horizontal
+        textual_widgets_Input = Input
+
+        class SaveConfigDialog(ModalScreen):
+            """保存配置对话框"""
+
+            DEFAULT_CSS = """
+            SaveConfigDialog {
+                align: center middle;
+            }
+
+            SaveConfigDialog > Vertical {
+                width: 50;
+                height: auto;
+                background: $surface;
+                border: thick $primary;
+                padding: 1 2;
+            }
+
+            SaveConfigDialog Label {
+                margin-bottom: 1;
+            }
+
+            SaveConfigDialog Input {
+                width: 1fr;
+                margin-bottom: 1;
+            }
+
+            SaveConfigDialog Horizontal {
+                height: auto;
+                align: center middle;
+            }
+
+            SaveConfigDialog Button {
+                min-width: 10;
+                margin: 0 1;
+            }
+            """
+
+            def __init__(self, default_name: str, callback):
+                super().__init__()
+                self._default_name = default_name
+                self._callback = callback
+
+            def compose(self):
+                with Vertical():
+                    yield Label("保存配置")
+                    yield Input(value=self._default_name, placeholder="输入配置名称", id="config-name-input")
+                    with Horizontal():
+                        yield Button("保存", id="btn-confirm-save", variant="primary")
+                        yield Button("取消", id="btn-cancel-save", variant="default")
+
+            def on_button_pressed(self, event):
+                if event.button.id == "btn-confirm-save":
+                    name = self.query_one("#config-name-input", Input).value.strip()
+                    if name:
+                        self._callback(name)
+                    self.dismiss()
+                elif event.button.id == "btn-cancel-save":
+                    self.dismiss()
+
+            def on_key(self, event):
+                if event.key == "escape":
+                    self.dismiss()
+
+        # 生成默认名称
+        dataset_id = self.query_one("#input-dataset", Input).value.strip() or "config"
+        default_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in dataset_id)
+
+        def do_save(name: str):
+            self._do_save_config(name)
+
+        self.app.push_screen(SaveConfigDialog(default_name, do_save))
+
+    def _do_save_config(self, name: str) -> None:
+        """实际保存配置到文件（保存完整的字段定义）"""
+        from pathlib import Path
+
+        # 收集当前配置
+        config_data = {
+            "dataset": self.query_one("#input-dataset", Input).value.strip(),
+            "output_dir": self.query_one("#input-output", Input).value.strip(),
+            "split_strategy": self._get_split_strategy(),
+            "fields": {},
+        }
+
+        # 收集完整的字段定义（包括可选值和已选中的值）
+        if self._form_state.is_schema_loaded:
+            for field_name, field in self._form_state.fields.items():
+                field_info = {
+                    "label": field.label,
+                    "field_type": field.field_type.value,
+                    "required": field.required,
+                    "values": field.values,  # 可选值列表
+                    "selected": field.selected,  # 已选中的值
+                    "details": field.definition.details,  # 字段定义详情
+                }
+                config_data["fields"][field_name] = field_info
+
+        # 保存到文件
+        config_dir = Path("./data/configs")
+        config_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
+        config_file = config_dir / f"{safe_name}.json"
+
+        try:
+            with open(config_file, "w", encoding="utf-8") as f:
+                json.dump(config_data, f, indent=2, ensure_ascii=False)
+            self.notify(f"配置已保存: {name}", severity="success")
+        except Exception as e:
+            self.notify(f"保存失败: {str(e)}", severity="error")
+
+    def _handle_load_config_file(self) -> None:
+        """从文件加载配置（弹出选择框让用户选择）"""
+        from pathlib import Path
+        from textual.screen import ModalScreen
+        from textual.widgets import Select as SelectWidget
+        from textual.containers import Vertical, Horizontal
+        import os
+
+        config_dir = Path("./data/configs")
+        config_dir.mkdir(parents=True, exist_ok=True)
+
+        # 查找所有配置文件
+        config_files = list(config_dir.glob("*.json"))
+        if not config_files:
+            self.notify("没有找到保存的配置文件", severity="warning")
+            return
+
+        # 按修改时间排序
+        config_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+        options = [(f.stem, str(f)) for f in config_files]
+
+        class LoadConfigDialog(ModalScreen):
+            """加载配置对话框"""
+
+            DEFAULT_CSS = """
+            LoadConfigDialog {
+                align: center middle;
+            }
+
+            LoadConfigDialog > Vertical {
+                width: 50;
+                height: auto;
+                background: $surface;
+                border: thick $primary;
+                padding: 1 2;
+            }
+
+            LoadConfigDialog Label {
+                margin-bottom: 1;
+            }
+
+            LoadConfigDialog Select {
+                width: 1fr;
+                margin-bottom: 1;
+            }
+
+            LoadConfigDialog Horizontal {
+                height: auto;
+                align: center middle;
+            }
+
+            LoadConfigDialog Button {
+                min-width: 10;
+                margin: 0 1;
+            }
+            """
+
+            def __init__(self, options, callback):
+                super().__init__()
+                self._options = options
+                self._callback = callback
+
+            def compose(self):
+                with Vertical():
+                    yield Label("选择配置文件")
+                    yield SelectWidget(
+                        options=[(name, path) for name, path in self._options],
+                        id="config-select",
+                        allow_blank=False,
+                    )
+                    with Horizontal():
+                        yield Button("加载", id="btn-confirm-load", variant="primary")
+                        yield Button("取消", id="btn-cancel-load", variant="default")
+
+            def on_button_pressed(self, event):
+                if event.button.id == "btn-confirm-load":
+                    select = self.query_one("#config-select", SelectWidget)
+                    if select.value:
+                        self._callback(select.value)
+                    self.dismiss()
+                elif event.button.id == "btn-cancel-load":
+                    self.dismiss()
+
+            def on_key(self, event):
+                if event.key == "escape":
+                    self.dismiss()
+
+        def do_load(path: str):
+            self._load_config_from_file(path)
+
+        self.app.push_screen(LoadConfigDialog(options, do_load))
+
+    def _load_config_from_file(self, config_path: str) -> None:
+        """从指定文件加载配置（直接恢复完整表单，不需要 API）"""
+        from src.core.dataset_schema import FormFieldDefinition, FieldType
+
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                config_data = json.load(f)
+
+            # 恢复数据集 ID
+            if config_data.get("dataset"):
+                self.query_one("#input-dataset", Input).value = config_data["dataset"]
+
+            # 恢复输出目录
+            if config_data.get("output_dir"):
+                self.query_one("#input-output", Input).value = config_data["output_dir"]
+
+            # 恢复拆分策略
+            strategy = config_data.get("split_strategy", "month")
+            strategy_set = self.query_one("#split-strategy-set", RadioSet)
+            buttons = list(strategy_set.query(RadioButton))
+            strategy_map = {"month": 0, "year": 1, "none": 2}
+            target_index = strategy_map.get(strategy, 0)
+            for i, btn in enumerate(buttons):
+                btn.value = (i == target_index)
+
+            # 从配置文件恢复完整的字段定义
+            fields_data = config_data.get("fields", {})
+            if fields_data:
+                # 创建 FormFieldDefinition 和 DynamicFormField 对象
+                from src.core.dataset_schema import DynamicFormField
+
+                self._form_state.fields = {}
+                self._form_state.collection_id = config_data.get("dataset", "")
+                self._form_state.is_schema_loaded = True
+
+                for field_name, field_info in fields_data.items():
+                    # 创建字段定义
+                    field_def = FormFieldDefinition(
+                        name=field_name,
+                        label=field_info.get("label", field_name),
+                        field_type=FieldType(field_info.get("field_type", "string_array")),
+                        required=field_info.get("required", False),
+                        details=field_info.get("details", {}),
+                    )
+
+                    # 创建字段状态
+                    field_state = DynamicFormField(
+                        definition=field_def,
+                        values=field_info.get("values", []),
+                    )
+                    if field_info.get("selected"):
+                        field_state.set_selected(field_info["selected"])
+
+                    self._form_state.fields[field_name] = field_state
+
+                # 渲染动态字段
+                self._render_dynamic_fields()
+
+                self._update_schema_status(
+                    f"已从配置文件加载（{len(fields_data)} 个字段）",
+                    "success"
+                )
+
+            self.notify("配置已加载", severity="success")
+
+        except Exception as e:
+            self.notify(f"加载失败: {str(e)}", severity="error")
 
     def refresh_data(self) -> None:
         """刷新配置数据（无需实现）"""

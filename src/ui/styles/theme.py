@@ -278,7 +278,7 @@ Button.btn-large {
 /* 输入框聚焦动画 */
 Input:focus {
     border: wide $accent;
-    background: $background 95%;
+    background: transparent;
 }
 
 /* 统计卡片悬停动画（旧版 HomeScreen 统计卡片） */

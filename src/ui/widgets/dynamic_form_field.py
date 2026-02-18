@@ -39,6 +39,7 @@ class DynamicFieldWidget(Vertical):
         text-style: bold;
         margin-bottom: 0;
         color: $text 80%;
+        height: auto;
     }
 
     .field-required {
@@ -47,9 +48,10 @@ class DynamicFieldWidget(Vertical):
 
     .field-input {
         width: 1fr;
+        height: 3;
         min-height: 3;
         border: round $panel;
-        background: $surface;
+        background: transparent;
         color: $text;
     }
 
@@ -61,10 +63,24 @@ class DynamicFieldWidget(Vertical):
         width: 1fr;
     }
 
+    .field-select-quick {
+        width: 1fr;
+        height: auto;
+        min-height: 1;
+        margin-top: 0;
+        background: transparent;
+        border: round $panel;
+    }
+
+    .field-select-quick:focus {
+        border: round $accent;
+    }
+
     .field-hint {
         color: $text-muted;
         text-style: italic;
         margin-top: 0;
+        height: auto;
     }
 
     .field-loading {
@@ -75,6 +91,23 @@ class DynamicFieldWidget(Vertical):
     .field-count {
         color: $accent;
         margin-left: 1;
+    }
+
+    .field-extent-row {
+        height: auto;
+    }
+
+    .field-extent {
+        width: 1fr;
+        height: 3;
+    }
+
+    .field-radio-set {
+        height: auto;
+    }
+
+    .field-switch {
+        height: auto;
     }
     """
 
@@ -161,10 +194,16 @@ class DynamicFieldWidget(Vertical):
             yield Label(hint, classes="field-hint")
 
     def _compose_input(self) -> None:
-        """构建输入框控件"""
+        """构建输入框控件（带下拉选择的组合控件）
+
+        对于有可选值的字段，同时显示：
+        - Input 输入框：显示当前选择，支持手动输入
+        - Select 下拉框：快速选择可选项（在输入框下方）
+        """
         placeholder = self._get_placeholder()
         initial_value = self._format_selected_for_input()
 
+        # 输入框先显示
         self._input_widget = Input(
             placeholder=placeholder,
             value=initial_value,
@@ -172,6 +211,19 @@ class DynamicFieldWidget(Vertical):
             classes="field-input",
         )
         yield self._input_widget
+
+        # 如果有可选值，在输入框下方显示下拉选择框
+        if self._field.values:
+            options = self._build_select_options_with_toggle()
+            if options:
+                self._select_widget = Select(
+                    options=options,
+                    value=Select.BLANK,
+                    id=f"select-{self._field.name}",
+                    classes="field-select-quick",
+                    allow_blank=True,
+                )
+                yield self._select_widget
 
     def _compose_select(self) -> None:
         """构建下拉选择框控件"""
@@ -275,11 +327,14 @@ class DynamicFieldWidget(Vertical):
             "e": _make_input("e", "E"),
         }
 
-        with Horizontal(classes="field-extent-row"):
-            yield self._extent_inputs["n"]
-            yield self._extent_inputs["w"]
-            yield self._extent_inputs["s"]
-            yield self._extent_inputs["e"]
+        # 直接 yield Horizontal 容器，避免使用 with 语句
+        yield Horizontal(
+            self._extent_inputs["n"],
+            self._extent_inputs["w"],
+            self._extent_inputs["s"],
+            self._extent_inputs["e"],
+            classes="field-extent-row",
+        )
 
     def _compose_licences(self) -> None:
         """构建许可证控件（Checkbox 列表）"""
@@ -312,7 +367,7 @@ class DynamicFieldWidget(Vertical):
             yield checkbox
 
     def _build_select_options(self) -> List[tuple]:
-        """构建下拉框选项列表
+        """构建下拉框选项列表（已排序）
 
         Returns:
             List[tuple]: (显示文本, 值) 元组列表
@@ -321,7 +376,36 @@ class DynamicFieldWidget(Vertical):
         for value in self._field.values:
             # 显示值和实际值相同
             options.append((str(value), str(value)))
+        # 按显示文本排序
+        options.sort(key=lambda x: x[0])
         return options
+
+    def _build_select_options_with_toggle(self) -> List[tuple]:
+        """构建带切换标记的下拉框选项列表
+
+        已选中的值显示 `-`，未选中的值显示 `+`
+        保持原始排序顺序
+
+        Returns:
+            List[tuple]: (显示文本, 值) 元组列表
+        """
+        # 获取当前选中的值
+        current_values = set(self._field.selected) if self._field.selected else set()
+
+        options = []
+        # 先按原始值排序
+        sorted_values = sorted([str(v) for v in self._field.values])
+        for value_str in sorted_values:
+            # 已选中显示 `-`，未选中显示 `+`
+            prefix = "-" if value_str in current_values else "+"
+            options.append((f"{prefix} {value_str}", value_str))
+        return options
+
+    def _update_select_options(self) -> None:
+        """更新下拉框选项，刷新 +/- 标记"""
+        if self._select_widget:
+            new_options = self._build_select_options_with_toggle()
+            self._select_widget.set_options(new_options)
 
     def _get_placeholder(self) -> str:
         """获取输入框占位符
@@ -401,8 +485,9 @@ class DynamicFieldWidget(Vertical):
     def on_select_changed(self, event: Select.Changed) -> None:
         """下拉框选择变化事件处理
 
-        Args:
-            event: 选择变化事件
+        对于组合控件（Select + Input），选择下拉项时：
+        - 将选中的值添加到输入框中（如果是多选字段）
+        - 或替换输入框的值（如果是单选字段）
         """
         if self._suppress_events:
             return
@@ -413,12 +498,52 @@ class DynamicFieldWidget(Vertical):
         # 获取选中的值
         value = event.value
         if value is None or value == Select.BLANK:
-            values = []
+            return  # 选择空项时不做任何操作
+
+        # 获取当前输入框中的值
+        current_input = self._input_widget.value if self._input_widget else ""
+        current_values = [v.strip() for v in current_input.split(",") if v.strip()]
+
+        # 根据字段类型决定是添加、移除还是替换
+        field_type = self._field.field_type
+        if field_type in (FieldType.STRING_ARRAY, FieldType.INTEGER_ARRAY, FieldType.FLOAT_ARRAY):
+            # 多选字段：切换选中状态（已存在则移除，不存在则添加）
+            if value in current_values:
+                current_values.remove(value)
+            else:
+                current_values.append(value)
         else:
-            values = [value]
+            # 单选字段：替换现有值
+            current_values = [value]
+
+        # 更新输入框
+        new_input_value = ", ".join(current_values)
+        if self._input_widget:
+            self._input_widget.value = new_input_value
+
+        # 更新字段选中状态（用于更新 +/- 标记）
+        self._field.set_selected(current_values)
+
+        # 更新下拉框选项的 +/- 标记
+        self._update_select_options()
+
+        # 重置下拉框为空（允许再次选择同一项）
+        self._suppress_events = True
+        try:
+            self._select_widget.value = Select.BLANK
+        finally:
+            self._suppress_events = False
+
+        # 延迟重新打开下拉框，让用户可以继续选择
+        self.set_timer(0.01, self._reopen_select)
 
         # 发送消息
-        self.post_message(self.FieldChanged(self._field.name, values))
+        self.post_message(self.FieldChanged(self._field.name, current_values))
+
+    def _reopen_select(self) -> None:
+        """重新打开下拉框"""
+        if self._select_widget and not self._select_widget.expanded:
+            self._select_widget.action_show_overlay()
 
     def on_switch_changed(self, event: Switch.Changed) -> None:
         """Switch 变化事件处理（布尔字段）"""
@@ -449,7 +574,8 @@ class DynamicFieldWidget(Vertical):
         # 仅处理本字段的 checkbox 集合
         if not self._licence_checkboxes:
             return
-        checkbox = event.toggle_button
+        # Checkbox.Changed 事件中，使用 event.checkbox 获取触发的 checkbox
+        checkbox = event.checkbox if hasattr(event, 'checkbox') else event.control
         if not isinstance(checkbox, Checkbox):
             return
         if checkbox not in self._licence_checkboxes.values():
@@ -690,9 +816,17 @@ class DynamicFieldWidget(Vertical):
         if self._field.values:
             return [{"id": str(v), "label": str(v)} for v in self._field.values]
 
-        details = self._field.definition.details.get("details", {})
+        raw_details = self._field.definition.details
+        inner_details = raw_details.get("details", {})
+
+        # 检查 children 字段（ExclusiveGroupWidget 的子组件列表）
+        children = raw_details.get("children")
+        if isinstance(children, list) and children:
+            return [{"id": str(c), "label": str(c)} for c in children]
+
+        # 检查 options/choices/items/values 字段
         for key in ("options", "choices", "items", "values"):
-            raw = details.get(key)
+            raw = inner_details.get(key)
             if isinstance(raw, list) and raw:
                 if all(isinstance(x, dict) for x in raw):
                     options: List[Dict[str, str]] = []
@@ -709,7 +843,7 @@ class DynamicFieldWidget(Vertical):
                 return [{"id": str(k), "label": str(v)} for k, v in raw.items()]
 
         # 兜底：若只有 default，则至少提供一个可选项避免空白
-        default_value = details.get("default")
+        default_value = inner_details.get("default")
         if default_value is not None:
             dv = str(default_value)
             return [{"id": dv, "label": dv}]

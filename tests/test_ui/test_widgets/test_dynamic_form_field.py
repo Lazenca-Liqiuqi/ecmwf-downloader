@@ -6,6 +6,7 @@ DynamicFieldWidget 组件测试
 """
 
 from contextlib import asynccontextmanager
+from textual.widgets import Input
 from textual.widgets import Select
 
 from src.core.dataset_schema import DynamicFormField, FieldType, FormFieldDefinition
@@ -24,6 +25,20 @@ async def _run_widget(field: DynamicFormField):
     app = TestApp()
     async with app.run_test() as _pilot:
         yield app.query_one("#dyn-field", DynamicFieldWidget)
+
+
+@asynccontextmanager
+async def _run_widget_with_pilot(field: DynamicFormField):
+    """将 DynamicFieldWidget 挂载到一个最小 App，并返回 pilot 以便等待事件循环。"""
+    from textual.app import App
+
+    class TestApp(App):
+        def compose(self):
+            yield DynamicFieldWidget(field, id="dyn-field")
+
+    app = TestApp()
+    async with app.run_test() as pilot:
+        yield app.query_one("#dyn-field", DynamicFieldWidget), pilot
 
 
 class TestDynamicFieldWidgetSelectInitialValue:
@@ -78,4 +93,57 @@ class TestDynamicFieldWidgetSelectInitialValue:
 
         async with _run_widget(field) as widget:
             select = widget.query_one("#select-data_format", Select)
+            assert select.value == Select.BLANK
+
+
+class TestDynamicFieldWidgetSelectBehavior:
+    """测试 Select 在不同形态下的行为差异（崩溃回归点 + 组合控件功能点）"""
+
+    async def test_string_single_select_does_not_reset_to_blank(self):
+        """纯下拉框：选择后应保持选中值（required 时不允许 BLANK）。"""
+        field = DynamicFormField(
+            definition=FormFieldDefinition(
+                name="variable",
+                label="Variable",
+                field_type=FieldType.STRING_SINGLE,
+                required=True,
+            ),
+            values=["t", "u"],
+            selected=[],
+        )
+
+        async with _run_widget_with_pilot(field) as (widget, pilot):
+            select = widget.query_one("#select-variable", Select)
+            select.value = "u"
+            await pilot.pause()
+            assert select.value == "u"
+
+    async def test_quick_select_appends_to_input_and_resets_select(self):
+        """组合控件：Select 选择后写入 Input，并将 Select 重置为空以允许重复选择同一项。"""
+        field = DynamicFormField(
+            definition=FormFieldDefinition(
+                name="variable",
+                label="Variable",
+                field_type=FieldType.STRING_ARRAY,
+                required=False,
+            ),
+            values=["t", "u"],
+            selected=[],
+        )
+
+        async with _run_widget_with_pilot(field) as (widget, pilot):
+            select = widget.query_one("#select-variable", Select)
+            inp = widget.query_one("#input-variable", Input)
+
+            assert inp.value == ""
+            assert select.value == Select.BLANK
+
+            select.value = "t"
+            await pilot.pause()
+            assert inp.value == "t"
+            assert select.value == Select.BLANK
+
+            select.value = "u"
+            await pilot.pause()
+            assert inp.value == "t, u"
             assert select.value == Select.BLANK

@@ -88,7 +88,7 @@ class AccountDialog(BaseDialog):
 
     AccountDialog Input:disabled {
         opacity: 0.6;
-        background: $panel;
+        background: transparent;
     }
 
     AccountDialog .hint {

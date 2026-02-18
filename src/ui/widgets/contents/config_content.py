@@ -1,30 +1,40 @@
 """
-ECMWF Downloader TUI 配置管理内容组件
+ECMWF Downloader TUI 配置管理内容组件（动态表单版）
 
-提供下载参数配置表单，支持创建新的下载任务。
-这是从ConfigScreen迁移而来的Widget版本。
+提供基于数据集 Schema 的动态配置表单，支持：
+- 从 ecmwf-datastores-client 获取数据集字段定义
+- 约束驱动的字段更新（如选择年份后自动更新可选日期）
+- 创建新的下载任务
+
 支持方向键操作：输入框用方向键移动光标，Enter键触发按钮。
 """
 
-from typing import Iterable, Literal
+from typing import Any, Dict, Iterable, List, Literal, Optional
 
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.events import Key
 from textual.widget import Widget
-from textual.widgets import Button, Input, Label, RadioButton, RadioSet
+from textual.widgets import Button, Input, Label, RadioButton, RadioSet, Static
 
 from src.core.config import DownloadConfig
+from src.core.dataset_schema import DynamicFormState, DynamicFormField
 from src.core.task_service import TaskService
+from src.api.ecmwf_datastores_client import DatastoresService, DatastoresServiceError
 from src.ui.dialogs import RequestPreviewDialog
+from src.ui.widgets.dynamic_form_field import (
+    DynamicFieldWidget,
+    DynamicFormFieldsContainer,
+)
 
 
 class ConfigContent(Widget):
-    """配置管理内容组件
+    """配置管理内容组件（动态表单版）
 
     功能：
-    - 显示下载参数配置表单
+    - 输入数据集 ID 后加载 Schema
+    - 根据数据集 Schema 动态渲染表单字段
+    - 字段值变化时自动更新约束
     - 创建新的下载任务
-    - 使用 Pydantic 进行参数验证
     """
 
     DEFAULT_CSS = """
@@ -36,15 +46,18 @@ class ConfigContent(Widget):
 
     #config-container {
         width: 1fr;
-        height: 1fr;
+        height: auto;
+        max-height: 100%;
         layout: vertical;
         overflow-y: auto;
         overflow-x: hidden;
+        padding: 1 2;
     }
 
     ConfigContent Input {
         width: 1fr;
-        min-height: 3;
+        height: auto;
+        min-height: 1;
         border: round $panel;
         background: $surface;
         color: $text;
@@ -62,14 +75,7 @@ class ConfigContent(Widget):
         margin-bottom: 2;
     }
 
-    #dataset-label,
-    #variables-label,
-    #years-label,
-    #months-label,
-    #area-label,
-    #levels-label,
-    #output-label,
-    #strategy-label {
+    .form-label {
         text-style: bold;
         margin-bottom: 0;
         color: $text 80%;
@@ -80,33 +86,69 @@ class ConfigContent(Widget):
         color: $accent;
     }
 
-    #dataset-section,
-    #variables-section,
-    #output-section,
-    #strategy-section,
-    #preview-info-section,
-    #time-section,
-    #spatial-section,
-    #actions-section {
+    .form-section {
         height: auto;
+        margin-bottom: 1;
     }
 
     #actions-section {
-        min-height: 3;
-        margin: 0 3 0 3;
+        height: auto;
+        margin: 1 3 0 3;
         padding: 0 1;
-    }
-
-    #years-container,
-    #months-container,
-    #area-container,
-    #levels-container {
-        width: 1fr;
-        height: auto;
     }
 
     #split-strategy-set {
         height: auto;
+    }
+
+    #dataset-section {
+        height: auto;
+        margin-bottom: 1;
+        padding: 1;
+        border: round $panel;
+    }
+
+    .dataset-input-row {
+        height: auto;
+        align: center middle;
+    }
+
+    #schema-status {
+        margin-top: 0;
+        color: $text-muted;
+    }
+
+    #schema-status.loading {
+        color: $warning;
+    }
+
+    #schema-status.success {
+        color: $success;
+    }
+
+    #schema-status.error {
+        color: $error;
+    }
+
+    #dynamic-form-section {
+        height: auto;
+        margin-top: 1;
+        padding-top: 1;
+        border-top: solid $panel;
+    }
+
+    #dynamic-fields {
+        height: auto;
+    }
+
+    #static-options-section {
+        margin-top: 1;
+        padding-top: 1;
+        border-top: solid $panel;
+    }
+
+    #btn-load-schema {
+        min-width: 15;
     }
     """
 
@@ -121,6 +163,23 @@ class ConfigContent(Widget):
         self._app_ref = app  # 使用_app_ref避免与Widget.app属性冲突
         self._task_service = TaskService(app.progress_manager)
 
+        # 动态表单状态
+        self._form_state = DynamicFormState()
+
+        # Datastores 服务（延迟初始化）
+        self._datastores_service: Optional[DatastoresService] = None
+
+        # 是否正在加载
+        self._is_loading = False
+
+    def _get_datastores_service(self) -> DatastoresService:
+        """获取或创建 Datastores 服务实例"""
+        if self._datastores_service is None:
+            # 尝试从应用获取账号信息
+            # TODO: 从账号池获取凭据
+            self._datastores_service = DatastoresService()
+        return self._datastores_service
+
     def compose(self) -> Iterable:
         """构建配置管理 UI"""
         # 主容器（可滚动）
@@ -128,68 +187,48 @@ class ConfigContent(Widget):
             # 标题
             yield Label("创建下载任务", id="config-title", classes="page-title")
 
-            # 数据集配置
+            # 数据集 ID 输入区域
             with Vertical(id="dataset-section", classes="form-section"):
-                yield Label("数据集类型", id="dataset-label")
-                yield Input(
-                    placeholder="reanalysis-era5-pressure-levels",
-                    id="input-dataset",
-                    value="reanalysis-era5-pressure-levels",
-                )
-
-            # 变量配置
-            with Vertical(id="variables-section", classes="form-section"):
-                yield Label("变量列表（逗号分隔）", id="variables-label")
-                yield Input(
-                    placeholder="temperature,geopotential",
-                    id="input-variables",
-                )
-
-            # 时间配置
-            with Horizontal(id="time-section", classes="section-compact"):
-                with Vertical(id="years-container"):
-                    yield Label("年份（逗号分隔）", id="years-label")
-                    yield Input(placeholder="2020,2021", id="input-years")
-
-                with Vertical(id="months-container"):
-                    yield Label("月份（逗号分隔）", id="months-label")
-                    yield Input(placeholder="1,2,3", id="input-months")
-
-            # 空间配置
-            with Horizontal(id="spatial-section", classes="section-compact"):
-                with Vertical(id="area-container"):
-                    yield Label("区域范围（N,W,S,E）", id="area-label")
-                    yield Input(placeholder="90,-180,-90,180", id="input-area")
-
-                with Vertical(id="levels-container"):
-                    yield Label("气压层（逗号分隔）", id="levels-label")
+                yield Label("数据集 ID", classes="form-label")
+                with Horizontal(classes="dataset-input-row"):
                     yield Input(
-                        placeholder="500,850,1000",
-                        id="input-levels",
+                        placeholder="reanalysis-era5-pressure-levels",
+                        id="input-dataset",
+                        value="reanalysis-era5-pressure-levels",
+                    )
+                    yield Button("加载 Schema", id="btn-load-schema", variant="primary")
+                yield Label("输入数据集 ID 后点击加载", id="schema-status")
+
+            # 动态表单区域（初始为空）
+            with Vertical(id="dynamic-form-section", classes="form-section"):
+                yield Label("数据集参数", classes="form-label")
+                # 动态字段容器
+                yield DynamicFormFieldsContainer(id="dynamic-fields")
+
+            # 静态配置选项
+            with Vertical(id="static-options-section", classes="form-section"):
+                # 输出目录
+                with Vertical(classes="form-section"):
+                    yield Label("输出目录", classes="form-label")
+                    yield Input(
+                        placeholder="./data/downloads",
+                        id="input-output",
+                        value="./data/downloads",
                     )
 
-            # 输出配置
-            with Vertical(id="output-section", classes="form-section"):
-                yield Label("输出目录", id="output-label")
-                yield Input(
-                    placeholder="./data/downloads",
-                    id="input-output",
-                    value="./data/downloads",
-                )
-
-            # 拆分策略配置
-            with Vertical(id="strategy-section", classes="form-section"):
-                yield Label("拆分策略", id="strategy-label")
-                with RadioSet(id="split-strategy-set"):
-                    yield RadioButton("按月", id="strategy-month", value=True)
-                    yield RadioButton("按年", id="strategy-year")
-                    yield RadioButton("不拆分", id="strategy-none")
+                # 拆分策略配置
+                with Vertical(classes="form-section"):
+                    yield Label("拆分策略", classes="form-label")
+                    with RadioSet(id="split-strategy-set"):
+                        yield RadioButton("按月", id="strategy-month", value=True)
+                        yield RadioButton("按年", id="strategy-year")
+                        yield RadioButton("不拆分", id="strategy-none")
 
             # 任务数量预览
             with Horizontal(id="preview-info-section", classes="section-compact"):
                 yield Label("将创建 0 个任务", id="task-count-label")
 
-            # 操作按钮（不使用全局 button-section 类，避免固定高度冲突）
+            # 操作按钮
             with Horizontal(id="actions-section"):
                 yield Button("预览", id="btn-preview", variant="primary")
                 yield Button("创建任务", id="btn-create", variant="default")
@@ -200,7 +239,10 @@ class ConfigContent(Widget):
         """按钮点击事件处理"""
         button_id = event.button.id
 
-        if button_id == "btn-preview":
+        if button_id == "btn-load-schema":
+            await self._handle_load_schema()
+
+        elif button_id == "btn-preview":
             await self._handle_preview()
 
         elif button_id == "btn-create":
@@ -211,6 +253,164 @@ class ConfigContent(Widget):
 
         elif button_id == "btn-reset":
             self._handle_reset()
+
+    async def _handle_load_schema(self) -> None:
+        """处理加载 Schema 按钮"""
+        if self._is_loading:
+            return
+
+        dataset_id = self.query_one("#input-dataset", Input).value.strip()
+        if not dataset_id:
+            self._update_schema_status("请输入数据集 ID", "error")
+            return
+
+        self._is_loading = True
+        self._update_schema_status("正在加载 Schema...", "loading")
+
+        try:
+            service = self._get_datastores_service()
+            schema = service.get_dataset_schema(dataset_id)
+
+            # 初始化表单状态
+            self._form_state.init_from_schema(schema)
+
+            # 渲染动态字段
+            self._render_dynamic_fields()
+
+            self._update_schema_status(
+                f"已加载: {schema.title}（{len(schema.fields)} 个字段）",
+                "success"
+            )
+
+        except DatastoresServiceError as e:
+            error_msg = str(e)
+            self._update_schema_status("加载失败", "error")
+            # 使用 notify 显示完整错误信息
+            self.notify(error_msg, severity="error", timeout=10)
+        except Exception as e:
+            error_msg = f"未知错误: {str(e)}"
+            self._update_schema_status("加载失败", "error")
+            self.notify(error_msg, severity="error", timeout=10)
+        finally:
+            self._is_loading = False
+
+    def _render_dynamic_fields(self) -> None:
+        """渲染动态表单字段"""
+        try:
+            container = self.query_one("#dynamic-fields", DynamicFormFieldsContainer)
+            if container is None:
+                raise RuntimeError("找不到 dynamic-fields 容器")
+
+            # 检查是否有字段
+            if not self._form_state.fields:
+                self.notify("警告：数据集没有可用的字段", severity="warning")
+                return
+
+            container.render_fields(self._form_state.fields)
+
+            # 刷新布局
+            container.refresh(layout=True)
+            self.refresh(layout=True)
+
+        except Exception as e:
+            self.notify(f"渲染字段失败: {str(e)}", severity="error")
+            raise
+
+    def _update_schema_status(self, message: str, status_type: str = "") -> None:
+        """更新 Schema 加载状态显示
+
+        Args:
+            message: 状态消息
+            status_type: 状态类型（loading, success, error）
+        """
+        status_label = self.query_one("#schema-status", Label)
+        status_label.update(message)
+
+        # 更新样式类
+        status_label.remove_class("loading", "success", "error")
+        if status_type:
+            status_label.add_class(status_type)
+
+    def on_dynamic_field_widget_field_changed(
+        self,
+        event: DynamicFieldWidget.FieldChanged,
+    ) -> None:
+        """处理动态字段值变化事件
+
+        当字段值变化时，触发约束更新。
+        """
+        # 更新表单状态
+        self._form_state.set_field_selection(event.field_name, event.selected_values)
+
+        # 特殊互斥逻辑：area_group 通常用于在 global/area 两种模式间切换
+        # 规则（仅在相关字段存在时生效）：
+        # - 选择 global：自动开启 global 开关并禁用/清空 area
+        # - 选择 area：关闭 global 并启用 area
+        if event.field_name == "area_group" and event.selected_values:
+            mode = str(event.selected_values[0]).strip().lower()
+            try:
+                container = self.query_one("#dynamic-fields", DynamicFormFieldsContainer)
+                global_widget = container.get_field_widget("global")
+                area_widget = container.get_field_widget("area")
+
+                if mode == "global":
+                    if global_widget:
+                        global_widget.disabled = False
+                        global_widget.set_selected_values(["true"])
+                        self._form_state.set_field_selection("global", ["true"])
+                    if area_widget:
+                        area_widget.set_selected_values([])
+                        self._form_state.set_field_selection("area", [])
+                        area_widget.disabled = True
+                elif mode == "area":
+                    if global_widget:
+                        global_widget.set_selected_values([])
+                        self._form_state.set_field_selection("global", [])
+                        global_widget.disabled = True
+                    if area_widget:
+                        area_widget.disabled = False
+            except Exception:
+                # 互斥增强逻辑不应影响主流程
+                pass
+
+        # 触发约束更新
+        self._trigger_constraints_update(event.field_name)
+
+    def _trigger_constraints_update(self, changed_field: str) -> None:
+        """触发约束更新
+
+        根据当前选择更新其他字段的可选值。
+
+        Args:
+            changed_field: 变化的字段名称
+        """
+        if not self._form_state.is_schema_loaded:
+            return
+
+        try:
+            service = self._get_datastores_service()
+            current_selection = self._form_state.get_current_selection()
+
+            # 调用 API 获取更新后的约束
+            constraints = service.apply_constraints(
+                self._form_state.collection_id,
+                current_selection,
+            )
+
+            # 更新表单状态
+            self._form_state.update_constraints(constraints)
+
+            # 更新 UI
+            container = self.query_one("#dynamic-fields", DynamicFormFieldsContainer)
+            for field_name, values in constraints.items():
+                if field_name != changed_field:
+                    container.update_field_values(field_name, values)
+
+        except DatastoresServiceError as e:
+            # 约束更新失败不阻塞用户操作，只记录日志
+            self.log.warning(f"约束更新失败: {str(e)}")
+        except Exception as e:
+            self.log.warning(f"约束更新异常: {str(e)}")
 
     async def _handle_preview(self) -> None:
         """处理预览按钮：展示请求参数并可确认创建任务。"""
@@ -250,49 +450,31 @@ class ConfigContent(Widget):
             self.notify(f"创建任务失败: {str(e)}", severity="error")
 
     def _build_config_from_form(self) -> DownloadConfig:
-        """从表单读取输入并构建下载配置。"""
+        """从表单读取输入并构建下载配置。
+
+        优先从动态表单获取值，如果动态表单未加载则使用静态字段。
+        """
         dataset = self.query_one("#input-dataset", Input).value.strip()
-        variables_str = self.query_one("#input-variables", Input).value.strip()
-        years_str = self.query_one("#input-years", Input).value.strip()
-        months_str = self.query_one("#input-months", Input).value.strip()
-        area_str = self.query_one("#input-area", Input).value.strip()
-        levels_str = self.query_one("#input-levels", Input).value.strip()
+        if not dataset:
+            raise ValueError("请输入数据集 ID")
+
         output_dir = self.query_one("#input-output", Input).value.strip()
 
-        if not dataset:
-            raise ValueError("请输入数据集类型")
-        if not variables_str:
-            raise ValueError("请输入变量列表")
-        if not years_str:
-            raise ValueError("请输入年份")
-        if not months_str:
-            raise ValueError("请输入月份")
+        # 从动态表单获取参数
+        if self._form_state.is_schema_loaded:
+            config_dict = self._form_state.to_download_config_dict()
+            config_dict["dataset"] = dataset
+            config_dict["output_dir"] = output_dir
 
-        variables = [item.strip() for item in variables_str.split(",") if item.strip()]
-        years = [int(item.strip()) for item in years_str.split(",") if item.strip()]
-        months = [int(item.strip()) for item in months_str.split(",") if item.strip()]
+            # 验证必填字段
+            errors = self._form_state.validate()
+            if errors:
+                raise ValueError("; ".join(errors))
 
-        area = None
-        if area_str:
-            area = [float(item.strip()) for item in area_str.split(",") if item.strip()]
+            return DownloadConfig(**config_dict)
 
-        pressure_levels = None
-        if levels_str:
-            pressure_levels = [
-                int(item.strip()) for item in levels_str.split(",") if item.strip()
-            ]
-
-        return DownloadConfig(
-            dataset=dataset,
-            variables=variables,
-            years=years,
-            months=months,
-            days=None,
-            times=None,
-            pressure_levels=pressure_levels,
-            area=area,
-            output_dir=output_dir,
-        )
+        # 回退：如果动态表单未加载，显示提示
+        raise ValueError("请先加载数据集 Schema")
 
     def _get_split_strategy(self) -> Literal["month", "year", "none"]:
         """获取当前选中的拆分策略。"""
@@ -313,26 +495,41 @@ class ConfigContent(Widget):
 
     def _handle_clear(self) -> None:
         """清空表单"""
+        # 清空数据集输入
         self.query_one("#input-dataset", Input).value = ""
-        self.query_one("#input-variables", Input).value = ""
-        self.query_one("#input-years", Input).value = ""
-        self.query_one("#input-months", Input).value = ""
-        self.query_one("#input-area", Input).value = ""
-        self.query_one("#input-levels", Input).value = ""
+        self._update_schema_status("输入数据集 ID 后点击加载", "")
+
+        # 清空动态字段
+        if self._form_state.is_schema_loaded:
+            container = self.query_one("#dynamic-fields", DynamicFormFieldsContainer)
+            container.clear_all()
+
+        # 清空静态字段
         self.query_one("#input-output", Input).value = ""
+
         self._update_task_count(0)
 
     def _handle_reset(self) -> None:
         """重置表单为默认值"""
+        # 重置数据集
         self.query_one("#input-dataset", Input).value = "reanalysis-era5-pressure-levels"
-        self.query_one("#input-variables", Input).value = ""
-        self.query_one("#input-years", Input).value = ""
-        self.query_one("#input-months", Input).value = ""
-        self.query_one("#input-area", Input).value = ""
-        self.query_one("#input-levels", Input).value = ""
+        self._update_schema_status("输入数据集 ID 后点击加载", "")
+
+        # 重置表单状态
+        self._form_state = DynamicFormState()
+
+        # 清空动态字段容器
+        container = self.query_one("#dynamic-fields", DynamicFormFieldsContainer)
+        for child in list(container.children):
+            child.remove()
+
+        # 重置静态字段
         self.query_one("#input-output", Input).value = "./data/downloads"
+
+        # 重置拆分策略
         strategy_set = self.query_one("#split-strategy-set", RadioSet)
         strategy_set.pressed_index = 0
+
         self._update_task_count(0)
 
     def refresh_data(self) -> None:

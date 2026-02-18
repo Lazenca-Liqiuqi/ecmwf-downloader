@@ -8,52 +8,65 @@
 
 **版本**：v0.2.0
 
-**日期**：2026-02-17
+**日期**：2026-02-18
 
 **工作目录**：D:\data\project\ECMWF downloader
 
 ## 工作任务
 
-本次对话完成了第五阶段的部分开发工作：
+本次对话完成了动态表单系统的 Bug 修复和功能扩展：
 
 | # | 任务 | 负责者 | 状态 |
 |---|------|--------|------|
-| 1 | 添加任务列表页"开始"下载按钮 | Codex | ✅ 完成 |
-| 2 | 修复 Path 对象 JSON 序列化问题 | Codex | ✅ 完成 |
+| 1 | 修复动态表单 CSS 布局空白问题 | Claude Code | ✅ 完成 |
+| 2 | 修复约束值合并问题（month/time 缺失） | Claude Code | ✅ 完成 |
+| 3 | 补充缺失的约束值（data_format, download_format） | Claude Code | ✅ 完成 |
+| 4 | 扩展字段类型（BOOLEAN, GEO_EXTENT, EXCLUSIVE_GROUP, LICENCE） | Codex | ✅ 完成 |
+| 5 | 实现特殊字段类型的 UI 渲染 | Codex | ✅ 完成 |
 
 ## 工作内容
 
-### 1. 添加"开始"下载按钮
+### 1. CSS 布局修复
 
-在任务列表页（`tasks_content.py` 和 `tasks_screen.py`）添加"开始"按钮功能：
+**问题**：动态表单区域显示大片空白
 
-- 在操作按钮区域添加"开始"按钮（`btn-start`）
-- 实现 `_handle_start()` 方法：
-  - 获取选中的任务 ID
-  - 验证任务状态为 PENDING
-  - 调用 `start_download_task()` 启动下载
-  - 提供用户反馈通知
-- 新增导入 `start_download_task` 函数
+**修复**：
+- `#config-container`：`height: 1fr` → `height: auto; max-height: 100%`
+- `ConfigContent Input`：`min-height: 3` → `min-height: 1`
+- `#actions-section`：`min-height: 3` → `height: auto`
+- 添加 `.dataset-input-row` 样式
 
-### 2. 修复 JSON 序列化问题
+### 2. 约束值合并修复
 
-**问题描述**：
-- 保存进度时报错：`Object of type WindowsPath is not JSON serializable`
-- 加载进度时报错：`ProgressLoadError: 进度文件JSON格式错误`
+**问题**：month 只有 11 个值（缺 '01'），time 只有 23 个值（缺 '00:00'）
 
-**根因分析**：
-- `task_service.py` 中 `download_params["output_path"]` 存储为 `Path` 对象
-- `json.dump()` 无法序列化 `Path` 类型
+**原因**：`_get_initial_constraints` 方法覆盖而非合并约束组合的值
 
-**修复方案**：
-- `task_service.py`：将 `Path()` 改为 `str()` 存储
-- `cds_client.py`：支持 `Union[Path, str]` 类型，字符串自动转 Path
-- `base.py`：抽象接口同步更新类型签名
-- `config_screen.py`：同类入口同步修复
+**修复**：合并所有约束组合的值，去重并保持顺序
 
-### 3. 清理损坏文件
+### 3. 补充缺失的约束值
 
-删除了损坏的进度文件 `data/download_progress.json`
+**问题**：`data_format` 和 `download_format` 没有可选值
+
+**原因**：这些字段的值在 `form.details.values` 中，而非 `constraints` 中
+
+**修复**：在 `_get_initial_constraints` 中补充从 `form.details.values` 获取值
+
+### 4. 字段类型扩展
+
+**新增类型**：
+| 类型 | Widget | UI 控件 |
+|------|--------|---------|
+| `BOOLEAN` | FreeEditionWidget | Switch 开关 |
+| `EXCLUSIVE_GROUP` | ExclusiveGroupWidget | RadioSet 单选组 |
+| `GEO_EXTENT` | GeographicExtentWidget | 4 个输入框 (N/W/S/E) |
+| `LICENCE` | LicenceWidget | Checkbox 复选框列表 |
+
+### 5. 互斥逻辑
+
+添加 `area_group` 字段的互斥逻辑：
+- 选择 `global`：自动开启 `global` 开关并禁用 `area`
+- 选择 `area`：关闭 `global` 并启用 `area`
 
 ## 交付物
 
@@ -61,14 +74,16 @@
 
 | 文件 | 修改内容 |
 |------|----------|
-| `src/ui/widgets/contents/tasks_content.py` | 添加"开始"按钮和 `_handle_start()` 方法 |
-| `src/ui/screens/tasks_screen.py` | 同步添加"开始"按钮 |
-| `src/core/task_service.py` | 修复 `output_path` 序列化（Path → str） |
-| `src/api/cds_client.py` | 支持字符串路径输入 |
-| `src/api/base.py` | 更新类型签名 |
-| `src/ui/screens/config_screen.py` | 同类入口修复 |
-| `tests/test_core/test_task_service.py` | 新增断言验证 |
-| `tests/test_api/test_cds_client.py` | 新增字符串路径测试 |
+| `src/core/dataset_schema.py` | 扩展 FieldType 枚举，更新 `_parse_field_type`，新增类型转换逻辑 |
+| `src/api/ecmwf_datastores_client.py` | 增强 `_get_initial_constraints`，添加 `_extract_widget_values` |
+| `src/ui/widgets/dynamic_form_field.py` | 新增 Switch/RadioSet/Checkbox/GeoExtent 渲染，事件处理 |
+| `src/ui/widgets/contents/config_content.py` | CSS 布局修复，添加 area_group 互斥逻辑 |
+| `tests/test_core/test_dataset_schema.py` | 新增 4 个字段类型测试 |
+
+### 测试覆盖
+
+- **413 passed, 1 failed**
+- 失败的测试 (`test_account_pool.py`) 与本次修改无关
 
 ## 状态变动
 
@@ -78,49 +93,39 @@
 ### 版本变化
 - 版本号保持不变：v0.2.0
 
-### 数据流更新
-
-```
-用户点击"开始"按钮
-    ↓
-TasksContent._handle_start()
-    ↓
-验证任务状态为 PENDING
-    ↓
-start_download_task(app, task_id)
-    ↓
-DownloadWorker.download_task() [后台线程]
-    ↓
-CDSClient.download() [实际下载]
-```
+### 功能变化
+- 动态表单现在支持所有 ECMWF Datastores API 字段类型
+- 约束值正确合并（month=12, time=24, data_format=2, download_format=2）
 
 ## 工具
 
 ### 主要工具
-- **Codex**：负责复杂编码任务（添加按钮、修复序列化问题）
-- **Claude Code**：负责上下文收集、任务规划、验证测试
+- **Claude Code**：CSS 布局修复，约束值合并修复
+- **Codex**：字段类型扩展，UI 组件实现
 
 ### 技术栈
-- **Textual TUI**：界面框架
-- **Pydantic**：数据验证
-- **Path/JSON**：文件路径处理与序列化
+- **ecmwf-datastores-client 0.4.0**：ECMWF 官方 API 客户端
+- **Textual 7.5+**：TUI 框架，Select/RadioSet/Switch/Checkbox 组件
 
 ## 下一步建议
 
-1. 测试"开始"按钮功能是否正常工作
-2. 实现下载页面的"开始所有"批量下载功能
-3. 实现任务列表页的"重试"和"取消"功能
-4. 完善下载进度实时更新
+1. 配置有效的 API 凭据测试动态约束更新
+2. 实现 `apply_constraints` 的实际调用
+3. 完善许可证字段在请求构建中的处理
+4. 优化 UI 响应和错误处理
 
 ## 总结
 
-本次会话完成了**第五阶段部分开发**：
+本次会话完成了**动态表单系统的 Bug 修复和功能扩展**：
 
 ### 主要成果
-- ✅ 任务列表页添加"开始"按钮（单个任务启动）
-- ✅ 修复 Path 对象 JSON 序列化问题
-- ✅ 删除损坏的进度文件
-- ✅ 语法检查全部通过
+- ✅ 修复 CSS 布局空白问题
+- ✅ 修复约束值合并问题（month=12, time=24）
+- ✅ 补充 data_format 和 download_format 约束值
+- ✅ 扩展 4 种新字段类型
+- ✅ 实现特殊字段的 UI 渲染
+- ✅ 添加 area_group 互斥逻辑
+- ✅ 413 个测试通过
 
 ---
 

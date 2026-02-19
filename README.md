@@ -8,7 +8,7 @@ ECMWF（European Centre for Medium-Range Weather Forecasts）提供全球领先�
 
 ## 当前状态
 
-**版本**：0.2.0
+**版本**：0.2.1
 
 **开发阶段**：第五阶段（下载功能集成）**进行中**
 
@@ -29,7 +29,8 @@ ECMWF（European Centre for Medium-Range Weather Forecasts）提供全球领先�
 - ✅ 对话框模块（添加/编辑账号 + 请求预览）
 - ✅ 自定义组件（TaskTable、AccountTable）
 - ✅ 后台下载Worker（线程安全）
-- ✅ 完整的单元测试（209个测试全部通过）
+- ✅ AI 参数生成（支持自然语言转配置）
+- ✅ 完整的单元测试（421个测试）
 
 ## 目录结构
 

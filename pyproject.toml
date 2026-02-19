@@ -38,7 +38,7 @@ skip_covered = false
 
 [project]
 name = "ecmwf-downloader"
-version = "0.0.1"
+version = "0.2.1"
 description = "ECMWF气象数据下载工具"
 readme = "README.md"
 requires-python = ">=3.8"

@@ -148,6 +148,33 @@ class TestDynamicFieldWidgetSelectBehavior:
             assert inp.value == "t, u"
             assert select.value == Select.BLANK
 
+    async def test_quick_select_update_values_keeps_blank_default(self):
+        """组合控件刷新可选值后，Select 仍应保持空值，不应自动跳到第一项。"""
+        field = DynamicFormField(
+            definition=FormFieldDefinition(
+                name="variable",
+                label="Variable",
+                field_type=FieldType.STRING_ARRAY,
+                required=True,
+            ),
+            values=["t", "u"],
+            selected=[],
+        )
+
+        async with _run_widget_with_pilot(field) as (widget, pilot):
+            select = widget.query_one("#select-variable", Select)
+            inp = widget.query_one("#input-variable", Input)
+
+            assert select.value == Select.BLANK
+            assert inp.value == ""
+
+            widget.update_values(["a", "b", "c"])
+            await pilot.pause()
+            await pilot.pause()
+
+            assert select.value == Select.BLANK
+            assert inp.value == ""
+
     async def test_programmatic_update_values_does_not_emit_field_changed(self):
         """程序化刷新选项：不应被当作用户点击，不应触发 FieldChanged。"""
         from textual.app import App

@@ -609,8 +609,14 @@ class DynamicFieldWidget(Vertical):
         current_input = self._input_widget.value if self._input_widget else ""
         current_values = [v.strip() for v in current_input.split(",") if v.strip()]
 
-        # 根据字段类型决定是添加、移除还是替换
         field_type = self._field.field_type
+        is_multi_quick = field_type in (
+            FieldType.STRING_ARRAY,
+            FieldType.INTEGER_ARRAY,
+            FieldType.FLOAT_ARRAY,
+        )
+
+        # 根据字段类型决定是添加、移除还是替换
         if field_type in (FieldType.STRING_ARRAY, FieldType.INTEGER_ARRAY, FieldType.FLOAT_ARRAY):
             # 多选字段：切换选中状态（已存在则移除，不存在则添加）
             if value in current_values:
@@ -645,8 +651,9 @@ class DynamicFieldWidget(Vertical):
         finally:
             self._suppress_events = False
 
-        # 不自动重开下拉框。
-        # 只在用户显式操作时再展开，避免出现“自动点击/自动弹出”。
+        # 快速多选模式：用户选择后自动再次展开，便于连续选择多个选项。
+        if is_multi_quick and self._select_widget and self._select_widget.is_mounted:
+            self.call_after_refresh(self._reopen_select)
 
         # 发送消息
         self.post_message(self.FieldChanged(self._field.name, sorted_values))
@@ -744,23 +751,36 @@ class DynamicFieldWidget(Vertical):
 
         # 更新下拉框选项
         if self._select_widget:
-            new_options = self._build_select_options()
+            is_quick_select = self._input_widget is not None
+            new_options = (
+                self._build_select_options_with_toggle()
+                if is_quick_select
+                else self._build_select_options()
+            )
             seq = self._begin_options_update()
             try:
                 self._select_widget.set_options(new_options)
-                # 保持 field.selected 与 Select 当前值一致（包括 set_options 内部回退后的值）
-                current = self._select_widget.value
-                valid_values = {str(opt[1]) for opt in new_options}
-                current_str = str(current) if current not in (None, Select.BLANK) else Select.BLANK
-                if current_str in valid_values:
-                    self._field.set_selected([current_str])
-                elif new_options and self._field.required:
-                    fallback = str(new_options[0][1])
-                    self._select_widget.value = fallback
-                    self._field.set_selected([fallback])
-                else:
+
+                # 组合控件（Input + Select）：
+                # Select 仅用于“快速选择”，默认始终保持空值，由用户手动选择。
+                if is_quick_select:
                     self._select_widget.value = Select.BLANK
-                    self._field.clear()
+                    if self._input_widget:
+                        self._input_widget.value = self._format_selected_for_input()
+                else:
+                    # 纯下拉：保持 field.selected 与 Select 当前值一致（包括 set_options 内部回退后的值）
+                    current = self._select_widget.value
+                    valid_values = {str(opt[1]) for opt in new_options}
+                    current_str = str(current) if current not in (None, Select.BLANK) else Select.BLANK
+                    if current_str in valid_values:
+                        self._field.set_selected([current_str])
+                    elif new_options and self._field.required:
+                        fallback = str(new_options[0][1])
+                        self._select_widget.value = fallback
+                        self._field.set_selected([fallback])
+                    else:
+                        self._select_widget.value = Select.BLANK
+                        self._field.clear()
             finally:
                 self._end_options_update(seq)
 

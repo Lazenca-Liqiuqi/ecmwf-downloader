@@ -136,17 +136,17 @@ class TestDynamicFieldWidgetSelectBehavior:
             inp = widget.query_one("#input-variable", Input)
 
             assert inp.value == ""
-            assert select.value == Select.BLANK
+            assert select.value == DynamicFieldWidget.QUICK_SELECT_PROMPT_VALUE
 
             select.value = "t"
             await pilot.pause()
             assert inp.value == "t"
-            assert select.value == Select.BLANK
+            assert select.value == DynamicFieldWidget.QUICK_SELECT_PROMPT_VALUE
 
             select.value = "u"
             await pilot.pause()
             assert inp.value == "t, u"
-            assert select.value == Select.BLANK
+            assert select.value == DynamicFieldWidget.QUICK_SELECT_PROMPT_VALUE
 
     async def test_quick_select_update_values_keeps_blank_default(self):
         """组合控件刷新可选值后，Select 仍应保持空值，不应自动跳到第一项。"""
@@ -165,14 +165,14 @@ class TestDynamicFieldWidgetSelectBehavior:
             select = widget.query_one("#select-variable", Select)
             inp = widget.query_one("#input-variable", Input)
 
-            assert select.value == Select.BLANK
+            assert select.value == DynamicFieldWidget.QUICK_SELECT_PROMPT_VALUE
             assert inp.value == ""
 
             widget.update_values(["a", "b", "c"])
             await pilot.pause()
             await pilot.pause()
 
-            assert select.value == Select.BLANK
+            assert select.value == DynamicFieldWidget.QUICK_SELECT_PROMPT_VALUE
             assert inp.value == ""
 
     async def test_programmatic_update_values_does_not_emit_field_changed(self):

@@ -360,41 +360,45 @@ class ConfigContent(Widget):
                 self.notify("警告：数据集没有可用的字段", severity="warning")
                 return
 
-            container.render_fields(self._form_state.fields)
+            # 定义挂载完成后的回调
+            def on_fields_mounted():
+                """字段挂载完成后的回调"""
+                # 恢复从配置文件加载的字段值
+                if self._pending_field_values:
+                    for field_name, values in self._pending_field_values.items():
+                        if field_name in self._form_state.fields:
+                            self._form_state.set_field_selection(field_name, values)
+                            widget = container.get_field_widget(field_name)
+                            if widget:
+                                widget.set_selected_values(values)
+                    # 清空待恢复的值
+                    self._pending_field_values = {}
 
-            # 恢复从配置文件加载的字段值
-            if self._pending_field_values:
-                for field_name, values in self._pending_field_values.items():
-                    if field_name in self._form_state.fields:
-                        self._form_state.set_field_selection(field_name, values)
-                        widget = container.get_field_widget(field_name)
-                        if widget:
-                            widget.set_selected_values(values)
-                # 清空待恢复的值
-                self._pending_field_values = {}
+                # 初始化 area_group 相关字段的显示状态
+                # 默认 area_group = global，所以隐藏 global 开关和 area 输入框
+                area_group = self._form_state.fields.get("area_group")
+                if area_group and area_group.selected:
+                    mode = str(area_group.selected[0]).strip().lower()
+                    global_widget = container.get_field_widget("global")
+                    area_widget = container.get_field_widget("area")
 
-            # 初始化 area_group 相关字段的显示状态
-            # 默认 area_group = global，所以隐藏 global 开关和 area 输入框
-            area_group = self._form_state.fields.get("area_group")
-            if area_group and area_group.selected:
-                mode = str(area_group.selected[0]).strip().lower()
-                global_widget = container.get_field_widget("global")
-                area_widget = container.get_field_widget("area")
+                    if mode == "global":
+                        # 默认 global 模式：隐藏 global 开关和 area 输入框
+                        if global_widget:
+                            global_widget.display = False
+                        if area_widget:
+                            area_widget.display = False
+                    elif mode == "area":
+                        # area 模式：隐藏 global 开关
+                        if global_widget:
+                            global_widget.display = False
 
-                if mode == "global":
-                    # 默认 global 模式：隐藏 global 开关和 area 输入框
-                    if global_widget:
-                        global_widget.display = False
-                    if area_widget:
-                        area_widget.display = False
-                elif mode == "area":
-                    # area 模式：隐藏 global 开关
-                    if global_widget:
-                        global_widget.display = False
+                # 刷新布局
+                container.refresh(layout=True)
+                self.refresh(layout=True)
 
-            # 刷新布局
-            container.refresh(layout=True)
-            self.refresh(layout=True)
+            # 渲染字段，使用回调处理异步挂载
+            container.render_fields(self._form_state.fields, on_complete=on_fields_mounted)
 
         except Exception as e:
             self.notify(f"渲染字段失败: {str(e)}", severity="error")

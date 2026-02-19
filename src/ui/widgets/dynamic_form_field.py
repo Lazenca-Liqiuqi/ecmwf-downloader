@@ -1101,6 +1101,7 @@ class DynamicFormFieldsContainer(Vertical):
     def render_fields(
         self,
         fields: Dict[str, DynamicFormField],
+        on_complete: Optional[callable] = None,
     ) -> None:
         """渲染字段组件
 
@@ -1108,12 +1109,52 @@ class DynamicFormFieldsContainer(Vertical):
 
         Args:
             fields: 字段状态字典
+            on_complete: 挂载完成后的回调函数（可选）
         """
         # 清除现有字段
         self._field_widgets.clear()
+
+        # 收集需要移除的旧 widget ID
+        old_widget_ids = []
+        for child in list(self.children):
+            if child.id:
+                old_widget_ids.append(child.id)
+
+        # 移除所有子组件
         for child in list(self.children):
             child.remove()
 
+        # 如果没有旧组件需要移除，直接挂载新组件
+        if not old_widget_ids:
+            self._mount_new_fields(fields)
+            if on_complete:
+                on_complete()
+        else:
+            # 使用延迟挂载，确保旧 widget 完全从 ID 注册表中移除
+            def _do_mount():
+                # 再次检查是否还有旧 widget 存在（防御性编程）
+                for widget_id in old_widget_ids:
+                    try:
+                        old_widget = self.app.query_one(f"#{widget_id}")
+                        # 如果还能找到，强制移除
+                        if old_widget:
+                            old_widget.remove()
+                    except Exception:
+                        pass  # 已经被移除了，忽略
+
+                self._mount_new_fields(fields)
+                if on_complete:
+                    on_complete()
+
+            # 延迟 0.1 秒，确保旧 widget 完全从 ID 注册表中移除
+            self.set_timer(0.1, _do_mount)
+
+    def _mount_new_fields(self, fields: Dict[str, DynamicFormField]) -> None:
+        """挂载新的字段组件
+
+        Args:
+            fields: 字段状态字典
+        """
         # 创建新字段组件
         widgets_to_mount = []
         for field_name, field in fields.items():

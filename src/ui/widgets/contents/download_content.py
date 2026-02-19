@@ -70,7 +70,6 @@ class DownloadContent(Widget):
         width: 1fr;
         height: auto;
         padding: 0 1;
-        gap: 1;
     }
 
     #download-container #progress-label {
@@ -91,7 +90,6 @@ class DownloadContent(Widget):
         width: 1fr;
         height: auto;
         padding: 0 1;
-        gap: 1;
     }
 
     #download-container .stat-item {
@@ -134,7 +132,6 @@ class DownloadContent(Widget):
         width: 1fr;
         height: auto;
         margin: 1 0 0 0;
-        gap: 1;
     }
 
     #download-container #control-section Button {

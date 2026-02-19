@@ -58,7 +58,6 @@ class TasksContent(Widget):
         width: 1fr;
         height: auto;
         margin: 1 0;
-        gap: 1;
     }
 
     #filter-container Button {
@@ -81,7 +80,6 @@ class TasksContent(Widget):
         width: 1fr;
         height: auto;
         margin: 1 0;
-        gap: 1;
     }
 
     #tasks-container #actions-container Button {

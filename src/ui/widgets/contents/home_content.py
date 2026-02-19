@@ -72,7 +72,6 @@ class HomeContent(Widget):
         width: 1fr;
         height: auto;
         margin: 1 0;
-        gap: 1;
     }
 
     /* ═══════════════════════════════════════════════════════════════

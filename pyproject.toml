@@ -48,6 +48,7 @@ dependencies = [
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
     "PyYAML>=6.0.1",
+    "ecmwf-datastores-client>=0.4.0",
 ]
 
 [project.optional-dependencies]

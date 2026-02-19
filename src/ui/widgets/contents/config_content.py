@@ -11,6 +11,7 @@ ECMWF Downloader TUI 配置管理内容组件（动态表单版）
 
 import asyncio
 import json
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Literal, Optional
 
 from textual.containers import Horizontal, ScrollableContainer, Vertical
@@ -720,8 +721,6 @@ class ConfigContent(Widget):
 
     def _do_save_config(self, name: str) -> None:
         """实际保存配置到文件（保存完整的字段定义）"""
-        from pathlib import Path
-
         # 收集当前配置
         config_data = {
             "dataset": self.query_one("#input-dataset", Input).value.strip(),
@@ -733,36 +732,38 @@ class ConfigContent(Widget):
         # 收集完整的字段定义（包括可选值和已选中的值）
         if self._form_state.is_schema_loaded:
             for field_name, field in self._form_state.fields.items():
-                field_info = {
-                    "label": field.label,
-                    "field_type": field.field_type.value,
-                    "required": field.required,
-                    "values": field.values,  # 可选值列表
-                    "selected": field.selected,  # 已选中的值
-                    "details": field.definition.details,  # 字段定义详情
-                }
-                config_data["fields"][field_name] = field_info
+                config_data["fields"][field_name] = self._serialize_field_config(field)
 
         # 保存到文件
         config_dir = Path("./data/configs")
         config_dir.mkdir(parents=True, exist_ok=True)
         safe_name = "".join(c if c.isalnum() or c in "-_" else "_" for c in name)
         config_file = config_dir / f"{safe_name}.json"
+        temp_file = config_dir / f"{safe_name}.json.tmp"
 
         try:
-            with open(config_file, "w", encoding="utf-8") as f:
-                json.dump(config_data, f, indent=2, ensure_ascii=False)
+            config_json = json.dumps(
+                self._to_json_safe(config_data),
+                indent=2,
+                ensure_ascii=False,
+            )
+            with open(temp_file, "w", encoding="utf-8") as f:
+                f.write(config_json)
+            temp_file.replace(config_file)
             self.notify(f"配置已保存: {name}", severity="success")
         except Exception as e:
+            try:
+                if temp_file.exists():
+                    temp_file.unlink()
+            except Exception:
+                pass
             self.notify(f"保存失败: {str(e)}", severity="error")
 
     def _handle_load_config_file(self) -> None:
         """从文件加载配置（弹出选择框让用户选择）"""
-        from pathlib import Path
         from textual.screen import ModalScreen
         from textual.widgets import Select as SelectWidget
         from textual.containers import Vertical, Horizontal
-        import os
 
         config_dir = Path("./data/configs")
         config_dir.mkdir(parents=True, exist_ok=True)
@@ -850,8 +851,6 @@ class ConfigContent(Widget):
 
     def _load_config_from_file(self, config_path: str) -> None:
         """从指定文件加载配置（直接恢复完整表单，不需要 API）"""
-        from src.core.dataset_schema import FormFieldDefinition, FieldType
-
         try:
             with open(config_path, "r", encoding="utf-8") as f:
                 config_data = json.load(f)
@@ -876,85 +875,19 @@ class ConfigContent(Widget):
             # 从配置文件恢复完整的字段定义
             fields_data = config_data.get("fields", {})
             if fields_data:
-                # 创建 FormFieldDefinition 和 DynamicFormField 对象
-                from src.core.dataset_schema import DynamicFormField
-
                 self._form_state.fields = {}
                 self._form_state.collection_id = config_data.get("dataset", "")
                 self._form_state.is_schema_loaded = True
 
                 for field_name, field_info in fields_data.items():
-                    # 构造字段数据用于解析字段类型
-                    field_data = {
-                        "name": field_name,
-                        "type": field_info.get("details", {}).get("widget_type", ""),
-                        "schema": field_info.get("details", {}).get("schema", {}),
-                        "details": field_info.get("details", {}),
-                    }
-
-                    # 使用当前的业务逻辑判断字段类型（而不是配置文件中保存的旧类型）
-                    field_type = FormFieldDefinition._parse_field_type(field_data)
-
-                    # 创建字段定义
-                    field_def = FormFieldDefinition(
-                        name=field_name,
-                        label=field_info.get("label", field_name),
-                        field_type=field_type,
-                        required=field_info.get("required", False),
-                        details=field_info.get("details", {}),
+                    if not isinstance(field_info, dict):
+                        continue
+                    if "definition" not in field_info:
+                        raise ValueError("配置格式过旧，请重新在线加载后保存")
+                    self._form_state.fields[field_name] = self._deserialize_field_config(
+                        field_name,
+                        field_info,
                     )
-
-                    # 创建字段状态
-                    field_state = DynamicFormField(
-                        definition=field_def,
-                        values=field_info.get("values", []),
-                    )
-
-                    # 处理选中值
-                    selected = field_info.get("selected", [])
-                    if selected:
-                        # 处理可能的异常格式
-                        import ast
-
-                        if isinstance(selected, str):
-                            # 情况1: selected 是字符串
-                            if selected.startswith("[") and selected.endswith("]"):
-                                # 尝试解析列表字符串 "['value']" → ['value']
-                                try:
-                                    parsed = ast.literal_eval(selected)
-                                    if isinstance(parsed, list):
-                                        selected = parsed
-                                    else:
-                                        selected = [parsed]
-                                except (ValueError, SyntaxError):
-                                    selected = [selected]
-                            else:
-                                selected = [selected]
-                        elif isinstance(selected, list):
-                            # 情况2: selected 是列表，检查元素是否是字符串形式的列表
-                            normalized = []
-                            for item in selected:
-                                if isinstance(item, str) and item.startswith("[") and item.endswith("]"):
-                                    try:
-                                        parsed = ast.literal_eval(item)
-                                        if isinstance(parsed, list):
-                                            # 取第一个元素或展开
-                                            normalized.extend(parsed)
-                                        else:
-                                            normalized.append(parsed)
-                                    except (ValueError, SyntaxError):
-                                        normalized.append(item)
-                                else:
-                                    normalized.append(item)
-                            selected = normalized
-
-                        # 对于单选字段，如果值是列表则只取第一个
-                        if field_type == FieldType.STRING_SINGLE and isinstance(selected, list):
-                            selected = [selected[0]] if selected else []
-
-                        field_state.set_selected(selected)
-
-                    self._form_state.fields[field_name] = field_state
 
                 # 渲染动态字段
                 self._render_dynamic_fields()
@@ -968,6 +901,129 @@ class ConfigContent(Widget):
 
         except Exception as e:
             self.notify(f"加载失败: {str(e)}", severity="error")
+
+    @staticmethod
+    def _to_json_safe(value: Any) -> Any:
+        """将任意值转换为可 JSON 序列化的数据结构。"""
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, dict):
+            return {str(k): ConfigContent._to_json_safe(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple)):
+            return [ConfigContent._to_json_safe(v) for v in value]
+        if isinstance(value, set):
+            return [ConfigContent._to_json_safe(v) for v in sorted(value, key=lambda x: str(x))]
+        return str(value)
+
+    @classmethod
+    def _serialize_field_config(cls, field: DynamicFormField) -> Dict[str, Any]:
+        """序列化单个字段配置（仅保留新格式必要信息）。"""
+        raw_definition = cls._to_json_safe(field.definition.details or {})
+        return {
+            "field_type": field.field_type.value,
+            "selected": cls._to_json_safe(field.selected),
+            "definition": raw_definition,
+        }
+
+    @classmethod
+    def _deserialize_field_config(
+        cls,
+        field_name: str,
+        field_info: Dict[str, Any],
+    ) -> DynamicFormField:
+        """反序列化单个字段配置（仅支持新格式）。"""
+        from src.core.dataset_schema import DynamicFormField, FieldType, FormFieldDefinition
+
+        definition = field_info.get("definition", {})
+        if not isinstance(definition, dict):
+            definition = {}
+
+        field_data = dict(definition)
+        field_data.setdefault("name", field_name)
+
+        saved_type = field_info.get("field_type")
+        if isinstance(saved_type, str):
+            try:
+                field_type = FieldType(saved_type)
+            except ValueError:
+                field_type = FormFieldDefinition._parse_field_type(field_data)
+        else:
+            field_type = FormFieldDefinition._parse_field_type(field_data)
+
+        label = str(field_data.get("label") or FormFieldDefinition._generate_label(field_name))
+        required = bool(field_data.get("required", False))
+
+        field_def = FormFieldDefinition(
+            name=field_name,
+            label=label,
+            field_type=field_type,
+            required=required,
+            details=field_data,
+        )
+
+        # 可选值始终以 definition 中的完整值为准，避免只恢复到约束后的子集
+        definition_values = cls._extract_all_values_from_definition(field_data)
+        values = definition_values if isinstance(definition_values, list) else []
+
+        field_state = DynamicFormField(
+            definition=field_def,
+            values=[str(v) for v in values],
+        )
+
+        selected = field_info.get("selected", [])
+        if isinstance(selected, list):
+            normalized_selected = selected
+        elif selected in (None, ""):
+            normalized_selected = []
+        else:
+            normalized_selected = [selected]
+
+        # 单值字段只取第一个
+        if field_type in (FieldType.STRING_SINGLE, FieldType.INTEGER_SINGLE, FieldType.BOOLEAN, FieldType.EXCLUSIVE_GROUP):
+            normalized_selected = normalized_selected[:1] if normalized_selected else []
+
+        field_state.set_selected(normalized_selected)
+        return field_state
+
+    @staticmethod
+    def _extract_all_values_from_definition(raw_definition: Any) -> List[Any]:
+        """从原始定义中提取完整可选值列表。"""
+        if not isinstance(raw_definition, dict):
+            return []
+
+        details = raw_definition.get("details", {})
+        if not isinstance(details, dict):
+            details = {}
+
+        for key in ("values", "options", "choices", "items"):
+            value = details.get(key)
+            if isinstance(value, list) and value:
+                # 支持 [{"id": "..."}] 与 ["..."] 两种格式
+                result: List[Any] = []
+                for item in value:
+                    if isinstance(item, dict):
+                        if "id" in item:
+                            result.append(item["id"])
+                        elif "value" in item:
+                            result.append(item["value"])
+                        else:
+                            result.append(item)
+                    else:
+                        result.append(item)
+                return result
+
+        # 特殊控件：LicenceWidget
+        licences = details.get("licences")
+        if isinstance(licences, list) and licences:
+            result = []
+            for item in licences:
+                if isinstance(item, dict) and "id" in item:
+                    result.append(item["id"])
+                else:
+                    result.append(item)
+            return result
+
+        return []
 
     def refresh_data(self) -> None:
         """刷新配置数据（无需实现）"""

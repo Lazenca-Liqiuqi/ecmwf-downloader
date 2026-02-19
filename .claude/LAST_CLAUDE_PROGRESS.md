@@ -14,53 +14,56 @@
 
 ## 工作任务
 
-本次对话完成了 AI 参数生成功能的开发与测试：
+本次对话完成了 AI 生成功能的增强和优化：
 
 | # | 任务 | 负责者 | 状态 |
 |---|------|--------|------|
-| 1 | AI 配置模型设计（ai_config.py） | Claude Code | ✅ 完成 |
-| 2 | AI 参数生成服务（ai_generator.py） | Claude Code | ✅ 完成 |
-| 3 | UI 集成（添加"AI生成"按钮） | Claude Code | ✅ 完成 |
-| 4 | 智谱 AI (GLM-4.7) 测试验证 | Claude Code | ✅ 完成 |
-| 5 | 气压层排序 Bug 修复 | Claude Code | ✅ 完成 |
+| 1 | AI 参数生成功能开发 | Claude Code | ✅ 完成 |
+| 2 | AI 日志功能（记录请求/响应） | Claude Code | ✅ 完成 |
+| 3 | AI 超时控制 | Claude Code | ✅ 完成 |
+| 4 | 气压层智能排序修复 | Claude Code | ✅ 完成 |
+| 5 | 日志格式优化（每次请求单独文件） | Claude Code | ✅ 完成 |
+| 6 | 版本更新 v0.2.0 → v0.2.1 | Claude Code | ✅ 完成 |
 
 ## 工作内容
 
-### 1. AI 配置模型 (src/core/ai_config.py)
+### 1. AI 参数生成功能 (src/core/ai_generator.py)
 
 **功能**：
-- 定义 AI 配置结构（base_url、api_key、model 等）
-- 支持环境变量替换（`${VAR_NAME}` 格式）
-- 配置加载和保存
-
-### 2. AI 参数生成服务 (src/core/ai_generator.py)
-
-**功能**：
-- 支持 OpenAI 兼容 API（OpenAI、智谱 AI、Ollama 等）
+- 支持 OpenAI 兼容 API（智谱 AI、OpenAI、Ollama 等）
 - 根据用户自然语言需求生成参数配置
 - 智能提取和验证 AI 返回的 JSON
-- 只保留有效值（从 values 列表中选择）
 
-### 3. UI 集成 (src/ui/widgets/contents/config_content.py)
+### 2. AI 日志功能
 
 **功能**：
-- 添加"AI生成"按钮
-- 弹出对话框让用户输入自然语言需求
-- 异步调用 AI API（避免阻塞 TUI）
-- 将 AI 生成的参数应用到表单
+- 每次请求生成单独的日志文件
+- 文件名格式：`ai_YYYYMMDD_HHMMSS_微秒_status.log`
+- 日志位置：`logs/ai/`
 
-### 4. 配置文件 (config/ai_config.yaml)
+**日志内容**：
+- 时间、状态、耗时
+- 模型配置（model、temperature、max_tokens、timeout）
+- 请求消息（SYSTEM + USER 完整内容）
+- 响应内容（原始 JSON）
+- Token 使用情况
 
-**内容**：
-- API 配置（base_url、api_key、model）
-- 请求参数（temperature、max_tokens、timeout）
-- 系统提示词（可自定义 AI 行为）
+### 3. 超时控制
 
-### 5. 气压层排序 Bug 修复
+**功能**：
+- 在 API 调用时显式传递 `timeout` 参数
+- 超时时间从配置文件读取（默认 120 秒）
 
-**问题**：气压层下拉栏按字符串排序（`"1000" < "500"`）
+### 4. 智能排序修复
 
-**修复**：使用智能排序 `_smart_sort_values()`，数字按数值大小排序
+**问题**：
+- UI 下拉栏气压层按字符串排序
+- 发送给 AI 的气压层值也按字符串排序
+
+**修复**：
+- UI 下拉栏：修改 `_build_select_options` 和 `_build_select_options_with_toggle`
+- AI 请求：在 `_prepare_input_json` 中添加 `_smart_sort_values` 方法
+- 数字按数值大小排序，字符串按字母排序
 
 ## 交付物
 
@@ -68,17 +71,21 @@
 
 | 文件 | 说明 |
 |------|------|
-| `config/ai_config.yaml` | AI 配置文件 |
+| `config/ai_config.yaml` | AI 配置文件模板 |
 | `src/core/ai_config.py` | AI 配置模型 |
 | `src/core/ai_generator.py` | AI 参数生成服务 |
+| `logs/ai/*.log` | AI 交互日志 |
 
 ### 修改的文件
 
 | 文件 | 修改内容 |
 |------|----------|
 | `src/ui/widgets/contents/config_content.py` | 添加 AI 生成按钮和处理逻辑 |
-| `src/ui/widgets/dynamic_form_field.py` | 修复数字排序问题 |
-| `pyproject.toml` | 添加 `openai` 可选依赖 |
+| `src/ui/widgets/dynamic_form_field.py` | 修复 UI 智能排序 |
+| `pyproject.toml` | 添加 `openai` 可选依赖，更新版本号 |
+| `CHANGELOG.md` | 添加 v0.2.1 更新日志 |
+| `README.md` | 更新版本和功能列表 |
+| `.claude/CLAUDE.md` | 更新版本号 |
 
 ## 测试结果
 
@@ -96,8 +103,8 @@
 ### 智能排序测试
 
 ```
-原始值: ['1000', '500', '850', '700', '1', '10', '100', '200', '300']
-排序后: ['1', '10', '100', '200', '300', '500', '700', '850', '1000']
+原始值: ['1000', '500', '850', '700', '1', '10', '100']
+排序后: ['1', '10', '100', '500', '700', '850', '1000']
 ```
 
 ## 状态变动
@@ -106,11 +113,12 @@
 - 第五阶段（下载功能集成）**继续进行中**
 
 ### 版本变化
-- 版本号保持不变：v0.2.0
+- v0.2.0 → v0.2.1
 
 ### 功能变化
 - 新增 AI 参数生成功能
-- 修复气压层数字排序问题
+- 新增 AI 交互日志
+- 修复气压层数字排序问题（UI + AI）
 
 ## 工具
 
@@ -131,15 +139,18 @@
 
 ## 总结
 
-本次会话完成了 **AI 参数生成功能** 的完整开发：
+本次会话完成了 **AI 参数生成功能** 的完整开发与优化：
 
 ### 主要成果
 - ✅ 支持 OpenAI 兼容 API（智谱 AI、OpenAI、Ollama 等）
 - ✅ 自然语言转参数配置
 - ✅ 可自定义系统提示词
-- ✅ 修复气压层数字排序问题
+- ✅ 完整的 AI 交互日志
+- ✅ 超时控制
+- ✅ 修复气压层数字排序问题（UI + AI）
+- ✅ 版本更新 v0.2.1
 
 ---
 
 **工作人员**：Claude Code
-**审核状态**：待审查
+**审核状态**：已完成

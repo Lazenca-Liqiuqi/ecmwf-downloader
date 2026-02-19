@@ -6,11 +6,17 @@ AI 参数生成服务
 
 import json
 import logging
+import time
+from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from src.core.ai_config import AIConfig, AIConfigLoader
 
 logger = logging.getLogger(__name__)
+
+# AI 日志目录
+AI_LOG_DIR = Path("logs/ai")
 
 
 class AIGeneratorError(Exception):
@@ -53,6 +59,69 @@ class AIGenerator:
             config = AIConfigLoader.load()
         self._config = config
         self._client = None
+
+    def _write_log(self, log_data: Dict[str, Any]) -> None:
+        """写入 AI 交互日志
+
+        Args:
+            log_data: 日志数据
+        """
+        try:
+            # 确保日志目录存在
+            AI_LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+            # 生成日志文件名（每次请求一个单独的文件，使用时间戳）
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+            status = log_data.get("status", "unknown")
+            log_file = AI_LOG_DIR / f"ai_{timestamp}_{status}.log"
+
+            # 格式化写入日志（易读格式）
+            with open(log_file, "w", encoding="utf-8") as f:
+                f.write("=" * 60 + "\n")
+                f.write(f"时间: {log_data.get('timestamp', 'N/A')}\n")
+                f.write(f"状态: {log_data.get('status', 'N/A')}\n")
+                f.write(f"耗时: {log_data.get('elapsed_time', 'N/A')}s\n")
+                f.write("-" * 60 + "\n")
+
+                # 请求信息
+                request = log_data.get("request", {})
+                f.write(f"模型: {request.get('model', 'N/A')}\n")
+                f.write(f"温度: {request.get('temperature', 'N/A')}\n")
+                f.write(f"最大Token: {request.get('max_tokens', 'N/A')}\n")
+                f.write(f"超时: {request.get('timeout', 'N/A')}s\n")
+
+                # 请求消息
+                f.write("\n[请求消息]\n")
+                for msg in request.get("messages", []):
+                    role = msg.get("role", "unknown")
+                    content = msg.get("content", "")
+                    f.write(f"--- {role.upper()} ---\n")
+                    f.write(content + "\n")
+
+                # 响应信息
+                response = log_data.get("response", {})
+                if response:
+                    f.write("-" * 60 + "\n")
+                    f.write("[响应内容]\n")
+                    f.write(response.get("content", "N/A") + "\n")
+
+                    usage = response.get("usage", {})
+                    if usage:
+                        f.write("\n[Token 使用]\n")
+                        f.write(f"  Prompt: {usage.get('prompt_tokens', 'N/A')}\n")
+                        f.write(f"  Completion: {usage.get('completion_tokens', 'N/A')}\n")
+                        f.write(f"  Total: {usage.get('total_tokens', 'N/A')}\n")
+
+                # 错误信息
+                if log_data.get("status") == "error":
+                    f.write("-" * 60 + "\n")
+                    f.write(f"[错误] {log_data.get('error', 'Unknown error')}\n")
+
+                f.write("=" * 60 + "\n")
+
+            logger.info(f"AI 日志已写入: {log_file}")
+        except Exception as e:
+            logger.warning(f"写入 AI 日志失败: {e}")
 
     @property
     def config(self) -> AIConfig:
@@ -119,6 +188,9 @@ class AIGenerator:
                 "AI 功能未配置，请在 config/ai_config.yaml 中设置 api_key"
             )
 
+        # 记录开始时间
+        start_time = time.time()
+
         # 1. 准备输入 JSON（清空 selected）
         input_json = self._prepare_input_json(field_schema)
 
@@ -131,30 +203,86 @@ class AIGenerator:
 
 请根据用户需求，从每个字段的 values 中选择合适的值填入 selected 字段。只输出 JSON，不要有其他文字。"""
 
-        # 3. 调用 API
+        # 构建完整的 messages
+        messages = [
+            {"role": "system", "content": self._config.system_prompt},
+            {"role": "user", "content": user_message},
+        ]
+
+        # 记录请求日志
+        logger.info(f"AI 请求开始 - 模型: {self._config.model}, 用户需求: {user_request[:50]}...")
+
+        # 3. 调用 API（带超时控制）
         try:
             client = self._get_client()
+            logger.debug(f"AI API 超时设置: {self._config.timeout}s")
+
             response = client.chat.completions.create(
                 model=self._config.model,
-                messages=[
-                    {"role": "system", "content": self._config.system_prompt},
-                    {"role": "user", "content": user_message},
-                ],
+                messages=messages,
                 temperature=self._config.temperature,
                 max_tokens=self._config.max_tokens,
+                timeout=self._config.timeout,
             )
         except Exception as e:
-            logger.error(f"AI API 调用失败: {e}")
+            elapsed_time = time.time() - start_time
+            error_msg = str(e)
+
+            # 写入失败日志
+            self._write_log({
+                "timestamp": datetime.now().isoformat(),
+                "elapsed_time": round(elapsed_time, 2),
+                "status": "error",
+                "error": error_msg,
+                "request": {
+                    "model": self._config.model,
+                    "temperature": self._config.temperature,
+                    "max_tokens": self._config.max_tokens,
+                    "timeout": self._config.timeout,
+                    "messages": messages,
+                },
+            })
+
+            logger.error(f"AI API 调用失败 ({elapsed_time:.2f}s): {e}")
             raise AIAPIError(f"AI API 调用失败: {e}")
+
+        # 计算耗时
+        elapsed_time = time.time() - start_time
 
         # 4. 解析响应
         try:
-            content = response.choices[0].message.content
-            if not content:
+            # 获取原始响应内容
+            raw_content = response.choices[0].message.content if response.choices else None
+
+            # 写入成功日志
+            self._write_log({
+                "timestamp": datetime.now().isoformat(),
+                "elapsed_time": round(elapsed_time, 2),
+                "status": "success",
+                "request": {
+                    "model": self._config.model,
+                    "temperature": self._config.temperature,
+                    "max_tokens": self._config.max_tokens,
+                    "timeout": self._config.timeout,
+                    "messages": messages,
+                },
+                "response": {
+                    "content": raw_content,
+                    "usage": {
+                        "prompt_tokens": response.usage.prompt_tokens if response.usage else None,
+                        "completion_tokens": response.usage.completion_tokens if response.usage else None,
+                        "total_tokens": response.usage.total_tokens if response.usage else None,
+                    },
+                },
+            })
+
+            if not raw_content:
                 raise AIResponseError("AI 返回空响应")
 
+            logger.info(f"AI 响应成功 ({elapsed_time:.2f}s), 响应长度: {len(raw_content)} 字符")
+
             # 提取 JSON（可能被 markdown 代码块包裹）
-            result_json = self._extract_json(content)
+            result_json = self._extract_json(raw_content)
 
             # 验证并修复结果
             validated_result = self._validate_and_fix_result(
@@ -166,25 +294,67 @@ class AIGenerator:
             return validated_result
 
         except (KeyError, IndexError) as e:
+            logger.error(f"AI 响应格式错误: {e}")
             raise AIResponseError(f"AI 响应格式错误: {e}")
 
+    def _smart_sort_values(self, values: list) -> list:
+        """智能排序值列表
+
+        排序规则：
+        - 纯数字：按数值大小排序
+        - 纯字符串：按字母顺序排序
+        - 混合：数字在前（按数值），字符串在后（按字母）
+
+        Args:
+            values: 待排序的值列表
+
+        Returns:
+            排序后的值列表
+        """
+        if not values:
+            return []
+
+        numeric_values = []
+        string_values = []
+
+        for v in values:
+            str_v = str(v)
+            try:
+                num = int(str_v)
+                numeric_values.append((num, v))
+            except ValueError:
+                try:
+                    num = float(str_v)
+                    numeric_values.append((num, v))
+                except ValueError:
+                    string_values.append((str_v.lower(), v))
+
+        numeric_values.sort(key=lambda x: x[0])
+        string_values.sort(key=lambda x: x[0])
+
+        return [v for _, v in numeric_values] + [v for _, v in string_values]
+
     def _prepare_input_json(self, field_schema: Dict[str, Any]) -> Dict[str, Any]:
-        """准备输入 JSON（清空 selected，保留 values）
+        """准备输入 JSON（清空 selected，保留 values 并智能排序）
 
         Args:
             field_schema: 原始字段定义
 
         Returns:
-            处理后的字段定义（selected 为空）
+            处理后的字段定义（selected 为空，values 智能排序）
         """
         result = {}
         for field_name, field_info in field_schema.items():
             if not isinstance(field_info, dict):
                 continue
 
+            raw_values = field_info.get("values", [])
+            # 对 values 进行智能排序
+            sorted_values = self._smart_sort_values(raw_values)
+
             result[field_name] = {
                 "field_type": field_info.get("field_type", "string_list"),
-                "values": field_info.get("values", []),
+                "values": sorted_values,
                 "selected": [],  # 清空已选项
             }
 

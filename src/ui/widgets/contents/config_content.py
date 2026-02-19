@@ -85,11 +85,6 @@ class ConfigContent(Widget):
         color: $text 80%;
     }
 
-    #task-count-label {
-        text-style: bold;
-        color: $accent;
-    }
-
     .form-section {
         height: auto;
         margin-bottom: 1;
@@ -227,9 +222,9 @@ class ConfigContent(Widget):
                 yield Label("数据集 ID", classes="form-label")
                 with Horizontal(classes="dataset-input-row"):
                     yield Input(
-                        placeholder="reanalysis-era5-pressure-levels",
+                        placeholder="输入数据集 ID（如 reanalysis-era5-pressure-levels）",
                         id="input-dataset",
-                        value="reanalysis-era5-pressure-levels",
+                        value="",
                     )
                     yield Button("在线加载", id="btn-load-schema", variant="primary")
                     yield Button("保存", id="btn-save-config", variant="default")
@@ -261,10 +256,6 @@ class ConfigContent(Widget):
                         yield RadioButton("按月", id="strategy-month", value=True)
                         yield RadioButton("按年", id="strategy-year")
                         yield RadioButton("不拆分", id="strategy-none")
-
-            # 任务数量预览
-            with Horizontal(id="preview-info-section", classes="section-compact"):
-                yield Label("将创建 0 个任务", id="task-count-label")
 
             # 操作按钮
             with Horizontal(id="actions-section"):
@@ -534,8 +525,6 @@ class ConfigContent(Widget):
             split_strategy = self._get_split_strategy()
             preview_items = self._task_service.preview_tasks(config, split_strategy)
 
-            self._update_task_count(len(preview_items))
-
             result = await self.app.push_screen(
                 RequestPreviewDialog(preview_items, split_strategy)
             )
@@ -558,7 +547,6 @@ class ConfigContent(Widget):
             config = self._build_config_from_form()
             split_strategy = self._get_split_strategy()
             task_ids = self._task_service.create_batch_tasks(config, split_strategy)
-            self._update_task_count(len(task_ids))
             self.notify(f"已创建 {len(task_ids)} 个任务", severity="success")
             self._handle_clear()
 
@@ -609,10 +597,6 @@ class ConfigContent(Widget):
             return "none"
         return "month"
 
-    def _update_task_count(self, count: int) -> None:
-        """更新任务数量提示标签。"""
-        self.query_one("#task-count-label", Label).update(f"将创建 {count} 个任务")
-
     def _handle_clear(self) -> None:
         """清空表单"""
         # 清空数据集输入
@@ -627,12 +611,10 @@ class ConfigContent(Widget):
         # 清空静态字段
         self.query_one("#input-output", Input).value = ""
 
-        self._update_task_count(0)
-
     def _handle_reset(self) -> None:
-        """重置表单为默认值"""
-        # 重置数据集
-        self.query_one("#input-dataset", Input).value = "reanalysis-era5-pressure-levels"
+        """重置表单（清空所有内容）"""
+        # 清空数据集
+        self.query_one("#input-dataset", Input).value = ""
         self._update_schema_status("输入数据集 ID 后点击加载", "")
 
         # 重置表单状态
@@ -651,8 +633,6 @@ class ConfigContent(Widget):
         buttons = list(strategy_set.query(RadioButton))
         for i, btn in enumerate(buttons):
             btn.value = (i == 0)
-
-        self._update_task_count(0)
 
     def _handle_save_config(self) -> None:
         """保存当前配置到文件（弹出输入框让用户输入名称）"""

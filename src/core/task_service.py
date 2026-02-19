@@ -190,7 +190,6 @@ class TaskService:
             "area": api_params.get("area"),
             "output_path": str(request.output_path),
             "product_type": api_params.get("product_type", "reanalysis"),
-            "grid": api_params.get("grid", [2.5, 2]),
             "data_format": api_params.get("data_format", "netcdf"),
             "download_format": api_params.get("download_format", "unarchived"),
         }

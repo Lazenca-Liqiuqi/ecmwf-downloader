@@ -219,7 +219,6 @@ class RequestBuilder:
             "variable": variables,
             "year": [str(y) for y in years],
             "month": [f"{m:02d}" for m in months],
-            "grid": kwargs.get("grid", [2.5, 2]),
             "data_format": kwargs.get("data_format", "netcdf"),
             "download_format": kwargs.get("download_format", "unarchived"),
         }

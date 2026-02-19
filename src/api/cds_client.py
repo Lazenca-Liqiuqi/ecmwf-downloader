@@ -131,11 +131,7 @@ class CDSClient(BaseAPIClient):
             pressure_levels: 气压层列表（可选，如 [500, 850, 1000]）
             area: 区域范围 [N, W, S, E]（可选）
             output_path: 输出文件路径（可选，支持Path或字符串，默认自动生成）
-            **kwargs: 其他参数：
-                - grid: 网格分辨率 [dx, dy]（默认 [2.5, 2]）
-                - data_format: 数据格式（默认 "netcdf"）
-                - download_format: 下载格式（默认 "unarchived"）
-                - product_type: 产品类型（默认 "reanalysis"）
+            **kwargs: 其他参数（data_format, download_format, product_type 等）
 
         Returns:
             Path: 下载文件的路径
@@ -210,7 +206,6 @@ class CDSClient(BaseAPIClient):
             "variable": variables,
             "year": [str(y) for y in years],
             "month": [f"{m:02d}" for m in months],
-            "grid": kwargs.get("grid", [2.5, 2]),
             "data_format": kwargs.get("data_format", "netcdf"),
             "download_format": kwargs.get("download_format", "unarchived"),
         }

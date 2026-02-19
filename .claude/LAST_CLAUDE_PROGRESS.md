@@ -14,102 +14,90 @@
 
 ## 工作任务
 
-本次对话完成了 TUI 界面的优化和问题修复：
+本次对话完成了"在线加载"功能的多个关键问题修复：
 
 | # | 任务 | 负责者 | 状态 |
 |---|------|--------|------|
-| 1 | 精简项目目录结构 | Claude Code | ✅ 完成 |
-| 2 | 删除主题功能模块 | Codex | ✅ 完成 |
-| 3 | 修复页面切换问题 | Claude Code + Codex | ✅ 完成 |
-| 4 | 修复退出后终端卡住问题 | Codex | ✅ 完成 |
-| 5 | 优化按钮和输入框样式 | Claude Code | ✅ 完成 |
-| 6 | 配置页面改名为"创建任务" | Claude Code | ✅ 完成 |
+| 1 | 修复 TUI 样式问题（卡片等设计元素缺失） | Claude Code | ✅ 完成 |
+| 2 | 修复在线加载 API 凭据问题（401 Unauthorized） | Claude Code + Codex | ✅ 完成 |
+| 3 | 修复动态表单字段选择后被重置的问题 | Claude Code + Codex | ✅ 完成 |
+| 4 | 修复配置文件加载时 selected 值解析问题 | Claude Code + Codex | ✅ 完成 |
+| 5 | 优化快速多选模式和纯下拉控件行为 | Codex | ✅ 完成 |
+| 6 | 重构配置持久化逻辑 | Codex | ✅ 完成 |
 
 ## 工作内容
 
-### 1. 目录精简
+### 1. 在线加载凭据修复
 
-- 删除 `frontend/` 空目录
-- 删除 `templates/` 目录（示例配置文件未被使用）
-- 清理 Python 缓存文件和测试临时目录
+**问题**：DatastoresService 初始化时没有传入凭据，导致 401 Unauthorized 错误
 
-### 2. 删除主题功能
+**解决方案**：
+- 从账号池获取凭据初始化 DatastoresService
+- 支持只用 key 的凭据格式（不需要 uid）
+- 使用 `asyncio.to_thread` 将网络请求放到后台线程，避免阻塞 TUI
 
-- 删除 `src/ui/styles/theme.py`（24KB 主题文件）
-- 删除 `src/ui/styles/__init__.py`
-- 移除所有屏幕和组件中的主题导入
-- 在 `app.py` 中添加全局 CSS 变量和基础样式
+### 2. 动态表单字段选择修复
 
-### 3. 修复页面切换问题
+**问题**：`Select.set_options()` 会重置值如果 label 变化，导致选择后被重置
 
-**根因**：复用同一个 Widget 实例进行 remove/mount 导致 Textual 无法正确再次挂载
+**解决方案**：
+- 添加 `_updating_options` 标志和序号机制
+- 使用 `call_after_refresh` 延后清除更新标志，解决 Textual 异步事件问题
+- 在 `on_select_changed` 中忽略更新期间的事件
 
-**解决方案**：每次切换页面时创建新的 Widget 实例
+### 3. 配置加载修复
 
-修改 `action_switch_page` 方法，从缓存实例改为按需创建：
-```python
-# 每次创建新的 Widget 实例
-content_widget = page_classes[page_id](app=self)
-```
+**问题**：
+- `_get_default_selected` 中 default_value 是列表时处理不正确
+- 配置文件中 selected 可能是字符串形式的列表 `"['grib']"`
 
-### 4. 修复退出问题
+**解决方案**：
+- 修复 default_value 是列表时的处理，正确提取第一个元素
+- 增强配置加载时 selected 值解析逻辑，处理字符串形式的列表
 
-- 添加 `action_quit` 异步方法
-- 实现 `_cleanup_before_exit` 清理逻辑
-- 取消 ContentArea 内部异步切换任务
-- 取消并等待 Textual workers 完成
-- 添加 `ContentArea.shutdown()` 方法
+### 4. 快速多选模式优化
 
-### 5. 样式优化
+**改进**：
+- 用户选择后自动再次展开下拉框，便于连续选择多个选项
+- 区分组合控件（Input + Select）和纯下拉的行为
+- 组合控件：Select 保持空值，由 Input 显示选中内容
+- 纯下拉：保持 field.selected 与 Select 当前值一致
 
-**全局 CSS 变量**：
-```css
-$bg: #0b1220;
-$panel: #0f172a;
-$surface: #111c2f;
-$border: #24324a;
-$text: #e5e7eb;
-$primary: #3b82f6;
-$accent: #60a5fa;
-```
+### 5. 配置持久化重构
 
-**按钮样式**：
-- 圆角边框：`border: round $border`
-- 透明背景：`background: transparent`
-- 紧凑尺寸：`height: 3; padding: 0 1`
-
-**输入框样式**：
-- 透明背景
-- 圆角边框
-- 焦点时高亮边框
-
-### 6. 配置页面改名
-
-将"配置"页面改名为"创建任务"：
-- `app.py` 快捷键提示
-- `navigation_sidebar.py` 侧边栏导航
-- `home_screen.py` 首页按钮
+**改进**：
+- 添加 `_serialize_field_config` 和 `_to_json_safe` 方法处理序列化
+- 添加 `_deserialize_field_config` 方法处理反序列化
+- 使用临时文件原子替换方式保存配置，避免写入失败导致文件损坏
+- 添加配置持久化测试用例
 
 ## 交付物
-
-### 删除的文件
-
-| 文件 | 说明 |
-|------|------|
-| `src/ui/styles/theme.py` | 主题文件 |
-| `src/ui/styles/__init__.py` | 包初始化文件 |
-| `templates/config/*.yaml.example` | 示例配置 |
-| `frontend/` | 空目录 |
 
 ### 修改的文件
 
 | 文件 | 修改内容 |
 |------|----------|
-| `src/ui/app.py` | 全局 CSS、页面切换逻辑、退出清理 |
-| `src/ui/widgets/content_area.py` | shutdown 方法 |
-| `src/ui/widgets/contents/*.py` | 异常处理、CSS 优化 |
-| `src/ui/screens/*.py` | 移除主题导入 |
-| `src/ui/widgets/navigation_sidebar.py` | 页面名称修改 |
+| `src/api/ecmwf_datastores_client.py` | 支持只用 key 的凭据格式 |
+| `src/core/dataset_schema.py` | 修复 default_value 是列表的处理 |
+| `src/ui/widgets/contents/config_content.py` | 凭据获取、异步约束更新、配置持久化 |
+| `src/ui/widgets/dynamic_form_field.py` | 选项更新标志机制、快速多选模式优化 |
+| `src/ui/app.py` | CSS 样式修复、颜色调整 |
+| `pyproject.toml` | 添加 ecmwf-datastores-client 依赖 |
+
+### 新增的文件
+
+| 文件 | 说明 |
+|------|------|
+| `tests/test_ui/test_widgets/test_config_content_persistence.py` | 配置持久化测试 |
+
+### Git 提交
+
+```
+5095b6a refactor: 重构配置持久化逻辑
+975ec36 fix: 优化快速多选模式与纯下拉控件行为
+6c6c667 chore: 添加依赖与清理 CSS
+7a7a98b fix: 修复在线加载与动态表单字段选择问题
+```
 
 ## 状态变动
 
@@ -120,38 +108,42 @@ $accent: #60a5fa;
 - 版本号保持不变：v0.2.0
 
 ### 功能变化
-- 删除主题模块，使用内联全局 CSS
-- 页面切换改为每次创建新实例
-- 按钮和输入框样式优化（透明背景、圆角）
+- 在线加载功能现在可以正常工作
+- 动态表单字段选择不再被重置
+- 配置文件保存/加载更加可靠
+
+### 测试状态
+- 55 个测试全部通过 ✅
 
 ## 工具
 
 ### 主要工具
-- **Claude Code**：目录清理、样式调整、问题修复
-- **Codex**：主题删除、CSS 补全、退出问题修复
+- **Claude Code**：问题分析、简单修复、代码审查
+- **Codex**：复杂 bug 修复、配置持久化重构、测试编写
 
 ### 技术栈
 - **Textual 7.5+**：TUI 框架
-- **Python 3.14**：运行环境
+- **ecmwf-datastores-client**：ECMWF API 客户端
+- **pytest**：单元测试框架
 
 ## 下一步建议
 
-1. 完善动态表单的字段验证
-2. 实现约束更新的实际调用
-3. 优化 UI 响应和错误处理
-4. 添加更多字段类型的支持
+1. 完善约束更新的错误处理
+2. 添加更多字段类型的测试覆盖
+3. 优化 UI 响应和加载状态显示
+4. 推送本地提交到远程仓库
 
 ## 总结
 
-本次会话完成了 **TUI 界面优化和问题修复**：
+本次会话完成了 **"在线加载"功能的全面修复**：
 
 ### 主要成果
-- ✅ 精简项目目录结构
-- ✅ 删除主题模块，简化代码
-- ✅ 修复页面切换无法显示的问题
-- ✅ 修复退出后终端卡住的问题
-- ✅ 优化按钮和输入框样式
-- ✅ 配置页面改名为"创建任务"
+- ✅ 修复 API 凭据问题，支持从账号池获取凭据
+- ✅ 修复动态表单字段选择后被重置的问题
+- ✅ 修复配置文件加载时的值解析问题
+- ✅ 优化快速多选模式的用户体验
+- ✅ 重构配置持久化逻辑，提高可靠性
+- ✅ 所有 55 个测试通过
 
 ---
 

@@ -147,3 +147,45 @@ class TestDynamicFieldWidgetSelectBehavior:
             await pilot.pause()
             assert inp.value == "t, u"
             assert select.value == Select.BLANK
+
+    async def test_programmatic_update_values_does_not_emit_field_changed(self):
+        """程序化刷新选项：不应被当作用户点击，不应触发 FieldChanged。"""
+        from textual.app import App
+
+        changed_events = []
+        field = DynamicFormField(
+            definition=FormFieldDefinition(
+                name="variable",
+                label="Variable",
+                field_type=FieldType.STRING_SINGLE,
+                required=True,
+            ),
+            values=["b", "c"],
+            selected=[],
+        )
+
+        class TestApp(App):
+            def compose(self):
+                yield DynamicFieldWidget(field, id="dyn-field")
+
+            def on_dynamic_field_widget_field_changed(self, event: DynamicFieldWidget.FieldChanged) -> None:
+                changed_events.append((event.field_name, list(event.selected_values)))
+
+        app = TestApp()
+        async with app.run_test() as pilot:
+            widget = app.query_one("#dyn-field", DynamicFieldWidget)
+            select = widget.query_one("#select-variable", Select)
+
+            # required=True 初始会选中首项 "b"
+            assert select.value == "b"
+            changed_events.clear()
+
+            # 触发一次程序化选项刷新（原选项 "b" 被移除）
+            widget.update_values(["a", "c"])
+            await pilot.pause()
+            await pilot.pause()
+
+            # 应自动回退到首项且同步内部状态，但不应触发用户变更事件
+            assert select.value == "a"
+            assert field.selected == ["a"]
+            assert changed_events == []

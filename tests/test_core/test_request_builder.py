@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from src.core.config import DatasetType, DownloadConfig
+from src.core.config import DownloadConfig
 from src.core.request_builder import DownloadRequest, RequestBuilder
 
 
@@ -20,7 +20,7 @@ class TestRequestBuilder:
     def sample_config(self, tmp_path: Path) -> DownloadConfig:
         """创建基础下载配置"""
         return DownloadConfig(
-            dataset=DatasetType.ERA5_PRESSURE_LEVELS,
+            dataset="reanalysis-era5-pressure-levels",
             variables=["temperature", "geopotential"],
             years=[2020, 2021],
             months=[1, 2],
@@ -140,20 +140,20 @@ class TestRequestBuilder:
     def test_filename_generation(self, builder: RequestBuilder, tmp_path: Path) -> None:
         """测试文件名生成与后缀格式"""
         nc_config = DownloadConfig(
-            dataset=DatasetType.ERA5_PRESSURE_LEVELS,
+            dataset="reanalysis-era5-pressure-levels",
             variables=["temperature"],
             years=[2020],
             months=[3],
             output_dir=tmp_path,
-            output_format="netcdf",
+            data_format="netcdf",
         )
         grib_config = DownloadConfig(
-            dataset=DatasetType.ERA5_PRESSURE_LEVELS,
+            dataset="reanalysis-era5-pressure-levels",
             variables=["temperature"],
             years=[2020],
             months=[3],
             output_dir=tmp_path,
-            output_format="grib",
+            data_format="grib",
         )
 
         nc_request = builder.build_request(nc_config)
@@ -167,7 +167,7 @@ class TestRequestBuilder:
     def test_api_params_format(self, builder: RequestBuilder, tmp_path: Path) -> None:
         """测试 API 参数时间维度格式化"""
         config = DownloadConfig(
-            dataset=DatasetType.ERA5_PRESSURE_LEVELS,
+            dataset="reanalysis-era5-pressure-levels",
             variables=["temperature"],
             years=[2020],
             months=[1, 11],

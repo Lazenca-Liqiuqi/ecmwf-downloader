@@ -50,26 +50,24 @@ class ECMWFDownloaderApp(App):
     # 全局 CSS 样式
     CSS = """
     /* =============================================================
-       主题变量（用于替代已删除主题文件中的变量）
+       主题变量 - 深色主题 + 青绿强调
 
-       说明：项目内多个组件 CSS 使用了 $bg/$surface/$border/$panel
-       等变量。如果这些变量未定义，Textual 会报“undefined variable”并
-       可能导致页面样式加载失败（进而出现页面空白/无法挂载）。
+       采用中性深灰背景，青绿色作为强调色，增强视觉对比度
        ============================================================= */
-    $bg: #0b1220;
-    $panel: #0f172a;
-    $panel-lighten-1: #172554;
-    $surface: #111c2f;
-    $border: #24324a;
+    $bg: #0d1117;
+    $panel: #161b22;
+    $panel-lighten-1: #21262d;
+    $surface: #1c2128;
+    $border: #30363d;
 
-    $text: #e5e7eb;
-    $text-muted: #9ca3af;
+    $text: #f0f6fc;
+    $text-muted: #8b949e;
 
-    $primary: #3b82f6;
-    $accent: #60a5fa;
-    $success: #22c55e;
-    $warning: #f59e0b;
-    $error: #ef4444;
+    $primary: #58a6ff;
+    $accent: #3fb950;
+    $success: #3fb950;
+    $warning: #d29922;
+    $error: #f85149;
 
     /* =============================================================
        基础布局
@@ -99,15 +97,17 @@ class ECMWFDownloaderApp(App):
        Header / Footer
        ============================================================= */
     Header {
-        background: $panel;
+        background: $primary;
         color: $text;
-        border-bottom: heavy $border;
+        text-align: center;
+        text-style: bold;
+        padding: 0 2;
     }
 
     Footer {
         background: $panel;
         color: $text-muted;
-        border-top: heavy $border;
+        padding: 0 1;
     }
 
     /* =============================================================
@@ -116,12 +116,15 @@ class ECMWFDownloaderApp(App):
     .content-container {
         width: 1fr;
         height: 1fr;
-        padding: 1 2;
+        padding: 1 1;
     }
 
     .page-title {
+        text-align: left;
         text-style: bold;
         color: $accent;
+        margin-top: 1;
+        margin-bottom: 2;
     }
 
     .table-section {
@@ -135,45 +138,44 @@ class ECMWFDownloaderApp(App):
     Button {
         height: 3;
         min-width: 8;
-        padding: 0 1;
-        margin: 0;
-        background: transparent;
+        padding: 0 2;
+        margin: 0 1;
+        background: $panel;
         color: $text;
-        border: round $border;
+        border: wide $panel;
+        text-style: none;
+        text-align: center;
     }
 
     Button:hover {
-        background: $primary 15%;
-        border: round $primary;
-    }
-
-    Button:focus {
-        background: transparent;
-        border: round $accent;
+        background: $primary 20%;
+        border: wide $primary;
         text-style: bold;
     }
 
+    Button:focus {
+        background: $primary 15%;
+        border: wide $accent;
+        text-style: bold;
+    }
+
+    Button:disabled {
+        background: $panel 50%;
+        border: wide $panel 50%;
+        color: $text 50%;
+        opacity: 0.6;
+    }
+
+    /* 按钮变体样式 */
     Button.-primary {
-        background: transparent;
-        color: $text;
-        border: round $primary;
+        background: $primary;
+        border: wide $primary;
         text-style: bold;
     }
 
     Button.-primary:hover {
-        background: $primary 15%;
-        border: round $primary;
-    }
-
-    Button.-primary:focus {
-        background: transparent;
-        border: round $accent;
-    }
-
-    Button:disabled {
-        background: transparent;
-        color: $text-muted;
-        border: round $border;
+        background: $primary 80%;
+        border: wide $primary 80%;
     }
 
     /* =============================================================
@@ -182,13 +184,13 @@ class ECMWFDownloaderApp(App):
     Input {
         height: 3;
         padding: 0 1;
-        border: round $border;
+        border: wide $panel;
         background: transparent;
         color: $text;
     }
 
     Input:focus {
-        border: round $accent;
+        border: wide $accent;
     }
 
     Input > .input--placeholder {
@@ -196,15 +198,15 @@ class ECMWFDownloaderApp(App):
     }
 
     Input.-invalid {
-        border: round $error;
+        border: wide $error;
     }
 
     /* =============================================================
        表格（DataTable / TaskTable / AccountTable）
        ============================================================= */
     DataTable {
-        border: round $border;
-        background: transparent;
+        border: thick $panel;
+        background: $bg 90%;
         color: $text;
     }
 
@@ -212,16 +214,24 @@ class ECMWFDownloaderApp(App):
         background: $panel;
         color: $text;
         text-style: bold;
+        border-bottom: thick $accent;
+        padding: 0 1;
+    }
+
+    DataTable > .datatable--header:hover {
+        background: $panel 80%;
     }
 
     DataTable > .datatable--cursor {
-        background: $primary 35%;
+        background: $primary 40%;
         color: $text;
         text-style: bold;
+        border-left: thick $accent;
     }
 
     DataTable > .datatable--hover {
         background: $primary 15%;
+        text-style: bold;
     }
 
     DataTable > .datatable--even-row {
@@ -230,6 +240,354 @@ class ECMWFDownloaderApp(App):
 
     DataTable > .datatable--odd-row {
         background: $surface 90%;
+    }
+
+    /* =============================================================
+       HomeContent 首页样式
+       ============================================================= */
+    HomeContent {
+        width: 1fr;
+        height: 1fr;
+    }
+
+    HomeContent #home-container {
+        width: 1fr;
+        height: 1fr;
+        overflow-y: auto;
+        padding: 1 1;
+    }
+
+    HomeContent #app-title {
+        text-align: center;
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 0;
+    }
+
+    HomeContent #app-subtitle {
+        text-align: center;
+        text-style: italic;
+        margin-top: 0;
+        margin-bottom: 2;
+        color: $text 60%;
+    }
+
+    HomeContent #stats-section {
+        width: 1fr;
+        height: auto;
+        margin: 1 0;
+    }
+
+    HomeContent .stat-card {
+        width: 1fr;
+        height: auto;
+        border: solid $panel;
+        padding: 1;
+        margin: 0;
+        background: $panel 30%;
+    }
+
+    HomeContent .stat-card:last-child {
+        margin-left: 1;
+    }
+
+    HomeContent .card-title {
+        text-align: left;
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 1;
+    }
+
+    HomeContent .stat-item {
+        text-align: left;
+        text-style: none;
+        color: $text 90%;
+        margin: 0;
+    }
+
+    HomeContent #recent-title {
+        text-align: left;
+        text-style: bold;
+        margin-top: 1;
+        margin-bottom: 0;
+        margin-left: 0;
+        color: $accent;
+    }
+
+    HomeContent #recent-table {
+        width: 1fr;
+        height: 1fr;
+        min-height: 10;
+        margin: 1 0 3 0;
+    }
+
+    /* =============================================================
+       TasksContent 任务列表样式
+       ============================================================= */
+    TasksContent {
+        width: 1fr;
+        height: 1fr;
+    }
+
+    TasksContent #tasks-container {
+        width: 1fr;
+        height: 1fr;
+        overflow-y: auto;
+        padding: 1 1;
+    }
+
+    TasksContent #tasks-title {
+        text-align: left;
+        text-style: bold;
+        color: $accent;
+        margin-bottom: 1;
+    }
+
+    TasksContent #filter-container {
+        width: 1fr;
+        height: auto;
+        margin: 1 0;
+        padding: 0;
+    }
+
+    TasksContent #filter-container Button {
+        width: 1fr;
+        margin: 0;
+    }
+
+    TasksContent #filter-container #filter-pending,
+    TasksContent #filter-container #filter-downloading,
+    TasksContent #filter-container #filter-completed,
+    TasksContent #filter-container #filter-failed {
+        margin-left: 1;
+    }
+
+    TasksContent #tasks-table {
+        width: 1fr;
+        height: 1fr;
+        margin: 1 0;
+    }
+
+    TasksContent #actions-container {
+        width: 1fr;
+        height: auto;
+        margin: 1 0;
+        padding: 0;
+    }
+
+    TasksContent #actions-container Button {
+        width: 1fr;
+        margin: 0;
+    }
+
+    TasksContent #actions-container Button.-middle,
+    TasksContent #actions-container Button.-last {
+        margin-left: 1;
+    }
+
+    /* =============================================================
+       DownloadContent 下载管理样式
+       ============================================================= */
+    DownloadContent {
+        width: 1fr;
+        height: 1fr;
+    }
+
+    DownloadContent #download-container {
+        width: 1fr;
+        height: 1fr;
+        overflow-y: auto;
+        padding: 1 1;
+    }
+
+    DownloadContent #download-title {
+        text-align: left;
+        text-style: bold;
+        color: $accent;
+        margin-top: 1;
+        margin-bottom: 1;
+    }
+
+    DownloadContent #progress-card {
+        width: 1fr;
+        height: auto;
+        border: solid $panel;
+        padding: 1 0;
+        margin: 1 0;
+        background: $panel 30%;
+    }
+
+    DownloadContent #progress-row {
+        width: 1fr;
+        height: auto;
+        padding: 0 1;
+    }
+
+    DownloadContent #progress-label {
+        width: auto;
+        text-style: bold;
+        color: $accent;
+        margin-right: 1;
+    }
+
+    DownloadContent #overall-progress {
+        width: 1fr;
+        margin: 0;
+    }
+
+    DownloadContent #stats-row {
+        width: 1fr;
+        height: auto;
+        padding: 0 1;
+    }
+
+    DownloadContent .stat-item {
+        width: 1fr;
+        text-align: center;
+        margin: 0;
+    }
+
+    DownloadContent .stat-value {
+        color: $accent;
+        text-style: bold;
+    }
+
+    DownloadContent #active-tasks-section {
+        width: 1fr;
+        height: 1fr;
+        margin: 1 0;
+    }
+
+    DownloadContent #active-label {
+        text-align: left;
+        text-style: bold;
+        margin-bottom: 1;
+        color: $accent;
+    }
+
+    DownloadContent #active-table {
+        width: 1fr;
+        height: 1fr;
+        margin: 1 0 0 0;
+    }
+
+    DownloadContent #control-section {
+        width: 1fr;
+        height: auto;
+        margin: 1 0 0 0;
+        padding: 0;
+    }
+
+    DownloadContent #control-section Button {
+        width: 1fr;
+        margin: 0;
+    }
+
+    DownloadContent #control-section Button.-middle,
+    DownloadContent #control-section Button.-last {
+        margin-left: 1;
+    }
+
+    /* =============================================================
+       AccountsContent 账号管理样式
+       ============================================================= */
+    AccountsContent {
+        width: 1fr;
+        height: 1fr;
+    }
+
+    AccountsContent #accounts-container {
+        width: 1fr;
+        height: 1fr;
+        overflow-y: auto;
+        padding: 1 1;
+        margin: 0;
+    }
+
+    AccountsContent #accounts-title {
+        text-align: left;
+        text-style: bold;
+        color: $accent;
+        margin-top: 1;
+        margin-bottom: 2;
+        margin-left: 0;
+    }
+
+    AccountsContent #table-section {
+        width: 1fr;
+        height: 1fr;
+        margin: 0;
+        padding: 0;
+    }
+
+    AccountsContent #accounts-table {
+        width: 1fr;
+        height: 1fr;
+        border: solid $panel;
+        margin: 1 0;
+    }
+
+    AccountsContent #actions-section {
+        width: 1fr;
+        height: auto;
+        margin: 1 0;
+        padding: 0;
+    }
+
+    AccountsContent #actions-section Button {
+        width: 1fr;
+        margin: 0;
+        padding: 0 1;
+    }
+
+    AccountsContent #actions-section #btn-edit,
+    AccountsContent #actions-section #btn-delete,
+    AccountsContent #actions-section #btn-enable,
+    AccountsContent #actions-section #btn-disable,
+    AccountsContent #actions-section #btn-refresh {
+        margin-left: 1;
+    }
+
+    /* =============================================================
+       通知样式
+       ============================================================= */
+    Notification {
+        background: $panel;
+        border: tall $accent;
+        padding: 1 2;
+    }
+
+    /* =============================================================
+       状态颜色样式
+       ============================================================= */
+    .status-pending {
+        color: $text 50%;
+        text-style: italic;
+    }
+
+    .status-downloading {
+        color: $primary;
+        text-style: bold;
+    }
+
+    .status-completed {
+        color: $success;
+        text-style: bold;
+    }
+
+    .status-failed {
+        color: $error;
+        text-style: bold;
+    }
+
+    .status-cancelled {
+        color: $warning;
+        text-style: bold;
+    }
+
+    .status-retrying {
+        color: $accent;
+        text-style: bold;
     }
     """
 

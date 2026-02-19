@@ -13,7 +13,6 @@ import shutil
 from pydantic import ValidationError
 
 from src.core.config import (
-    DatasetType,
     AccountStatus,
     AccountInfo,
     AccountPoolConfig,
@@ -23,14 +22,6 @@ from src.core.config import (
     LoggingConfig,
     AppConfig,
 )
-
-
-class TestDatasetType:
-    """测试DatasetType枚举"""
-
-    def test_era5_pressure_levels_value(self):
-        """测试ERA5气压层数据集枚举值"""
-        assert DatasetType.ERA5_PRESSURE_LEVELS == "reanalysis-era5-pressure-levels"
 
 
 class TestAccountStatus:
@@ -216,7 +207,7 @@ class TestDownloadConfig:
             months=[1, 2, 3],
             output_dir=tmp_path
         )
-        assert config.dataset == DatasetType.ERA5_PRESSURE_LEVELS  # 默认
+        assert config.dataset == "reanalysis-era5-pressure-levels"  # 默认
         assert config.variables == ["temperature", "geopotential"]
         assert config.years == [2023]
         assert config.months == [1, 2, 3]

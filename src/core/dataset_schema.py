@@ -72,6 +72,18 @@ class FormFieldDefinition:
 
         根据 API 返回的字段结构判断字段类型。
         """
+        # 获取字段名
+        field_name = field_data.get("name", "")
+
+        # 特殊字段：强制单选（即使 API 返回的是多选类型）
+        # data_format 和 download_format 只需要选择一个值
+        single_select_fields = {
+            "data_format",
+            "download_format",
+        }
+        if field_name in single_select_fields:
+            return FieldType.STRING_SINGLE
+
         # 获取字段的 schema 或 type 信息
         schema = field_data.get("schema", {})
         widget_type = field_data.get("type", "")
@@ -467,6 +479,9 @@ class DynamicFormState:
         field_type = field_def.field_type
 
         if field_type in (FieldType.STRING_SINGLE, FieldType.EXCLUSIVE_GROUP):
+            # 处理 default_value 可能是列表的情况
+            if isinstance(default_value, list):
+                return [str(v) for v in default_value] if default_value else []
             return [str(default_value)]
 
         if field_type == FieldType.BOOLEAN:

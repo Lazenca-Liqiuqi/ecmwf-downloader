@@ -9,6 +9,8 @@ ECMWF Downloader TUI 配置管理内容组件（动态表单版）
 支持方向键操作：输入框用方向键移动光标，Enter键触发按钮。
 """
 
+import asyncio
+import json
 from typing import Any, Dict, Iterable, List, Literal, Optional
 
 from textual.containers import Horizontal, ScrollableContainer, Vertical
@@ -177,12 +179,35 @@ class ConfigContent(Widget):
         # 待恢复的字段值（从配置文件加载后使用）
         self._pending_field_values: Dict[str, List[Any]] = {}
 
+        # 约束更新序号（用于丢弃过期结果）
+        self._constraints_seq = 0
+
     def _get_datastores_service(self) -> DatastoresService:
-        """获取或创建 Datastores 服务实例"""
+        """获取或创建 Datastores 服务实例
+
+        从账号池获取活跃账号的凭据来初始化服务。
+        """
         if self._datastores_service is None:
-            # 尝试从应用获取账号信息
-            # TODO: 从账号池获取凭据
-            self._datastores_service = DatastoresService()
+            # 从应用账号池获取凭据
+            uid, key, url = None, None, None
+
+            try:
+                if hasattr(self._app_ref, 'account_pool') and self._app_ref.account_pool:
+                    # 使用 get_next_account 获取可用账号
+                    account = self._app_ref.account_pool.get_next_account()
+                    if account:
+                        uid = account.uid
+                        key = account.key
+                        url = account.url
+                        self.log.info(f"使用账号 {account.id} 的凭据")
+            except Exception as e:
+                self.log.warning(f"获取账号凭据失败: {e}")
+
+            self._datastores_service = DatastoresService(
+                url=url or "https://cds.climate.copernicus.eu/api",
+                uid=uid,
+                key=key,
+            )
         return self._datastores_service
 
     def compose(self) -> Iterable:
@@ -201,7 +226,7 @@ class ConfigContent(Widget):
                         id="input-dataset",
                         value="reanalysis-era5-pressure-levels",
                     )
-                    yield Button("加载配置", id="btn-load-schema", variant="primary")
+                    yield Button("在线加载", id="btn-load-schema", variant="primary")
                     yield Button("保存", id="btn-save-config", variant="default")
                     yield Button("读取", id="btn-load-config", variant="default")
                 yield Label("输入数据集 ID 后点击加载", id="schema-status")
@@ -279,10 +304,16 @@ class ConfigContent(Widget):
 
         self._is_loading = True
         self._update_schema_status("正在加载 Schema...", "loading")
+        load_button = self.query_one("#btn-load-schema", Button)
+        load_button.disabled = True
 
         try:
             service = self._get_datastores_service()
-            schema = service.get_dataset_schema(dataset_id)
+            # 网络请求放到后台线程，避免阻塞 TUI 主线程
+            schema = await asyncio.to_thread(
+                service.get_dataset_schema,
+                dataset_id,
+            )
 
             # 初始化表单状态
             self._form_state.init_from_schema(schema)
@@ -306,6 +337,7 @@ class ConfigContent(Widget):
             self.notify(error_msg, severity="error", timeout=10)
         finally:
             self._is_loading = False
+            load_button.disabled = False
 
     def _render_dynamic_fields(self) -> None:
         """渲染动态表单字段"""
@@ -419,17 +451,36 @@ class ConfigContent(Widget):
                 # 互斥增强逻辑不应影响主流程
                 pass
 
-        # 触发约束更新
-        self._trigger_constraints_update(event.field_name)
+        # 触发约束更新（异步，避免阻塞 UI）
+        self._schedule_constraints_update(event.field_name)
 
-    def _trigger_constraints_update(self, changed_field: str) -> None:
-        """触发约束更新
+    def _schedule_constraints_update(self, changed_field: str) -> None:
+        """调度约束更新（异步）
 
-        根据当前选择更新其他字段的可选值。
+        根据当前选择更新其他字段的可选值，并在后台线程执行网络调用。
+        使用序号丢弃过期结果，避免快速操作时旧结果覆盖新状态。
 
         Args:
             changed_field: 变化的字段名称
         """
+        if not self._form_state.is_schema_loaded:
+            return
+        self._constraints_seq += 1
+        seq = self._constraints_seq
+        self.run_worker(
+            self._apply_constraints_update(changed_field, seq),
+            name="constraints-update",
+            group="constraints-update",
+            exclusive=True,
+            exit_on_error=False,
+        )
+
+    async def _apply_constraints_update(
+        self,
+        changed_field: str,
+        seq: int,
+    ) -> None:
+        """执行约束更新（后台线程 + 主线程回写）"""
         if not self._form_state.is_schema_loaded:
             return
 
@@ -437,11 +488,16 @@ class ConfigContent(Widget):
             service = self._get_datastores_service()
             current_selection = self._form_state.get_current_selection()
 
-            # 调用 API 获取更新后的约束
-            constraints = service.apply_constraints(
+            # 调用 API 获取更新后的约束（放后台线程）
+            constraints = await asyncio.to_thread(
+                service.apply_constraints,
                 self._form_state.collection_id,
                 current_selection,
             )
+
+            # 丢弃过期结果，防止旧请求覆盖新状态
+            if seq != self._constraints_seq or not self.is_mounted:
+                return
 
             # 更新表单状态
             self._form_state.update_constraints(constraints)
@@ -476,9 +532,12 @@ class ConfigContent(Widget):
                 self._handle_clear()
 
         except ValueError as e:
-            self.notify(f"参数验证失败: {str(e)}", severity="error")
+            # 转义方括号避免 Textual markup 解析错误
+            error_msg = str(e).replace("[", "\\[").replace("]", "\\]")
+            self.notify(f"参数验证失败: {error_msg}", severity="error")
         except Exception as e:
-            self.notify(f"预览失败: {str(e)}", severity="error")
+            error_msg = str(e).replace("[", "\\[").replace("]", "\\]")
+            self.notify(f"预览失败: {error_msg}", severity="error")
 
     def _handle_create(self) -> None:
         """处理创建任务按钮，直接创建任务。"""
@@ -491,9 +550,11 @@ class ConfigContent(Widget):
             self._handle_clear()
 
         except ValueError as e:
-            self.notify(f"参数验证失败: {str(e)}", severity="error")
+            error_msg = str(e).replace("[", "\\[").replace("]", "\\]")
+            self.notify(f"参数验证失败: {error_msg}", severity="error")
         except Exception as e:
-            self.notify(f"创建任务失败: {str(e)}", severity="error")
+            error_msg = str(e).replace("[", "\\[").replace("]", "\\]")
+            self.notify(f"创建任务失败: {error_msg}", severity="error")
 
     def _build_config_from_form(self) -> DownloadConfig:
         """从表单读取输入并构建下载配置。
@@ -823,11 +884,22 @@ class ConfigContent(Widget):
                 self._form_state.is_schema_loaded = True
 
                 for field_name, field_info in fields_data.items():
+                    # 构造字段数据用于解析字段类型
+                    field_data = {
+                        "name": field_name,
+                        "type": field_info.get("details", {}).get("widget_type", ""),
+                        "schema": field_info.get("details", {}).get("schema", {}),
+                        "details": field_info.get("details", {}),
+                    }
+
+                    # 使用当前的业务逻辑判断字段类型（而不是配置文件中保存的旧类型）
+                    field_type = FormFieldDefinition._parse_field_type(field_data)
+
                     # 创建字段定义
                     field_def = FormFieldDefinition(
                         name=field_name,
                         label=field_info.get("label", field_name),
-                        field_type=FieldType(field_info.get("field_type", "string_array")),
+                        field_type=field_type,
                         required=field_info.get("required", False),
                         details=field_info.get("details", {}),
                     )
@@ -837,8 +909,50 @@ class ConfigContent(Widget):
                         definition=field_def,
                         values=field_info.get("values", []),
                     )
-                    if field_info.get("selected"):
-                        field_state.set_selected(field_info["selected"])
+
+                    # 处理选中值
+                    selected = field_info.get("selected", [])
+                    if selected:
+                        # 处理可能的异常格式
+                        import ast
+
+                        if isinstance(selected, str):
+                            # 情况1: selected 是字符串
+                            if selected.startswith("[") and selected.endswith("]"):
+                                # 尝试解析列表字符串 "['value']" → ['value']
+                                try:
+                                    parsed = ast.literal_eval(selected)
+                                    if isinstance(parsed, list):
+                                        selected = parsed
+                                    else:
+                                        selected = [parsed]
+                                except (ValueError, SyntaxError):
+                                    selected = [selected]
+                            else:
+                                selected = [selected]
+                        elif isinstance(selected, list):
+                            # 情况2: selected 是列表，检查元素是否是字符串形式的列表
+                            normalized = []
+                            for item in selected:
+                                if isinstance(item, str) and item.startswith("[") and item.endswith("]"):
+                                    try:
+                                        parsed = ast.literal_eval(item)
+                                        if isinstance(parsed, list):
+                                            # 取第一个元素或展开
+                                            normalized.extend(parsed)
+                                        else:
+                                            normalized.append(parsed)
+                                    except (ValueError, SyntaxError):
+                                        normalized.append(item)
+                                else:
+                                    normalized.append(item)
+                            selected = normalized
+
+                        # 对于单选字段，如果值是列表则只取第一个
+                        if field_type == FieldType.STRING_SINGLE and isinstance(selected, list):
+                            selected = [selected[0]] if selected else []
+
+                        field_state.set_selected(selected)
 
                     self._form_state.fields[field_name] = field_state
 

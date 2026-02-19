@@ -32,6 +32,25 @@ class BaseScreen(Screen):
         self.app 是 Screen 基类提供的 property，指向父级 App 实例。
     """
 
+    # 基础 CSS 变量定义（确保单独测试时也能访问）
+    # 这些变量与 App 级别的 CSS 变量保持一致
+    DEFAULT_CSS = """
+    /* CSS 变量定义 - 深色主题 + 青绿强调 */
+    $bg: #0d1117;
+    $panel: #161b22;
+    $surface: #1c2128;
+    $border: #30363d;
+
+    $text: #f0f6fc;
+    $text-muted: #8b949e;
+
+    $primary: #58a6ff;
+    $accent: #3fb950;
+    $success: #3fb950;
+    $warning: #d29922;
+    $error: #f85149;
+    """
+
     def __init__(self, *args, **kwargs):
         """初始化基础屏幕"""
         super().__init__(*args, **kwargs)

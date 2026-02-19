@@ -98,8 +98,13 @@ class DownloadConfig(BaseModel):
     """
 
     # 数据集配置
-    dataset: DatasetType = Field(
-        default=DatasetType.ERA5_PRESSURE_LEVELS, description="数据集类型"
+    dataset: str = Field(
+        default="reanalysis-era5-pressure-levels",
+        description="数据集类型（如 reanalysis-era5-pressure-levels）"
+    )
+    product_type: List[str] = Field(
+        default=["reanalysis"],
+        description="产品类型列表（如 reanalysis, monthly_averaged_reanalysis）"
     )
     variables: List[str] = Field(..., description="要下载的变量列表")
 
@@ -122,7 +127,8 @@ class DownloadConfig(BaseModel):
 
     # 输出配置
     output_dir: Path = Field(..., description="输出目录路径")
-    output_format: str = Field(default="netcdf", description="输出文件格式")
+    data_format: str = Field(default="netcdf", description="数据格式（netcdf 或 grib）")
+    download_format: str = Field(default="unarchived", description="下载格式（unarchived 或 zip）")
 
     @field_validator("years")
     @classmethod
@@ -190,6 +196,24 @@ class DownloadConfig(BaseModel):
         # 创建目录（如果不存在）
         v.mkdir(parents=True, exist_ok=True)
         return v
+
+    @field_validator("data_format")
+    @classmethod
+    def validate_data_format(cls, v: str) -> str:
+        """验证数据格式"""
+        valid = ["netcdf", "grib"]
+        if v.lower() not in valid:
+            raise ValueError(f"数据格式必须是: {valid}")
+        return v.lower()
+
+    @field_validator("download_format")
+    @classmethod
+    def validate_download_format(cls, v: str) -> str:
+        """验证下载格式"""
+        valid = ["unarchived", "zip"]
+        if v.lower() not in valid:
+            raise ValueError(f"下载格式必须是: {valid}")
+        return v.lower()
 
 
 class ProgressConfig(BaseModel):

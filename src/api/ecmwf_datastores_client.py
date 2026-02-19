@@ -70,8 +70,16 @@ class DatastoresService:
             from ecmwf.datastores import Client
 
             # 构建完整的 key 字符串
-            if self.uid and self.key:
-                full_key = f"{self.uid}:{self.key}"
+            # ECMWF CDS API 支持两种格式：
+            # 1. 新格式：直接使用 key（UUID 格式）
+            # 2. 旧格式：uid:key
+            if self.key:
+                # 优先使用 key，如果有 uid 则组合成 uid:key 格式
+                if self.uid and self.uid not in ("", "1", "None"):
+                    full_key = f"{self.uid}:{self.key}"
+                else:
+                    # 只有 key，直接使用（新格式）
+                    full_key = self.key
             else:
                 # 尝试从配置文件读取
                 full_key = None

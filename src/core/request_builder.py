@@ -168,14 +168,16 @@ class RequestBuilder:
             times=config.times,
             pressure_levels=config.pressure_levels,
             area=config.area,
-            data_format=config.output_format,
+            product_type=config.product_type,
+            data_format=config.data_format,
+            download_format=config.download_format,
         )
 
         filename = self._generate_filename(
             years=years,
             months=months,
             variables=config.variables,
-            output_format=config.output_format,
+            output_format=config.data_format,
         )
         output_path = config.output_dir / filename
         time_range: Dict[str, List] = {
@@ -185,7 +187,7 @@ class RequestBuilder:
         }
 
         return DownloadRequest(
-            dataset=config.dataset.value,
+            dataset=config.dataset,
             api_params=api_params,
             output_path=output_path,
             filename=filename,
@@ -207,8 +209,13 @@ class RequestBuilder:
 
         该逻辑与CDSClient._build_request保持一致，保证请求结构兼容。
         """
+        # product_type 统一转换为列表形式以符合 CDS API 预期格式
+        product_type = kwargs.get("product_type", ["reanalysis"])
+        if isinstance(product_type, str):
+            product_type = [product_type]
+
         request: Dict[str, Any] = {
-            "product_type": kwargs.get("product_type", "reanalysis"),
+            "product_type": product_type,
             "variable": variables,
             "year": [str(y) for y in years],
             "month": [f"{m:02d}" for m in months],

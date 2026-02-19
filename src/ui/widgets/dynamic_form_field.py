@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 动态表单字段组件
 
@@ -149,6 +150,8 @@ class DynamicFieldWidget(Vertical):
         super().__init__(name=name, id=id, classes=classes, disabled=disabled)
         self._field = field
         self._suppress_events = False
+        self._updating_options = False  # 标记是否正在更新选项（用于忽略期间的事件）
+        self._options_update_seq = 0  # 选项更新序号（用于延迟释放更新标记）
         self._input_widget: Optional[Input] = None
         self._select_widget: Optional[Select] = None
         self._switch_widget: Optional[Switch] = None
@@ -402,10 +405,43 @@ class DynamicFieldWidget(Vertical):
         return options
 
     def _update_select_options(self) -> None:
-        """更新下拉框选项，刷新 +/- 标记"""
+        """更新下拉框选项，刷新 +/- 标记
+
+        注意：Textual Select.set_options() 会重置值如果 label 变化。
+        对“快速选择”场景不恢复当前值，避免二次触发 Select.Changed 导致选中反转。
+        """
         if self._select_widget:
-            new_options = self._build_select_options_with_toggle()
-            self._select_widget.set_options(new_options)
+            seq = self._begin_options_update()
+            try:
+                # 构建新选项
+                new_options = self._build_select_options_with_toggle()
+                self._select_widget.set_options(new_options)
+            finally:
+                self._end_options_update(seq)
+
+    def _begin_options_update(self) -> int:
+        """开始一次下拉选项更新并返回更新序号。"""
+        self._options_update_seq += 1
+        self._updating_options = True
+        self._suppress_events = True
+        return self._options_update_seq
+
+    def _end_options_update(self, seq: int) -> None:
+        """结束一次下拉选项更新。
+
+        先立即恢复事件抑制标记，再延后一帧清除 updating 标记，
+        以吸收 set_options 可能延后派发的 Select.Changed 事件。
+        """
+        self._suppress_events = False
+
+        def _clear_updating_flag() -> None:
+            if seq == self._options_update_seq:
+                self._updating_options = False
+
+        if self.is_mounted:
+            self.call_after_refresh(_clear_updating_flag)
+        else:
+            _clear_updating_flag()
 
     def _get_placeholder(self) -> str:
         """获取输入框占位符
@@ -449,12 +485,65 @@ class DynamicFieldWidget(Vertical):
     def _format_selected_for_input(self) -> str:
         """格式化选中值为输入框显示格式
 
+        对选中的值进行智能排序：
+        - 数字类型按数值大小排序
+        - 字符串类型按字母顺序排序
+        - 混合类型：数字在前（按数值），字符串在后（按字母）
+
         Returns:
             str: 逗号分隔的字符串
         """
         if not self._field.selected:
             return ""
-        return ", ".join(str(v) for v in self._field.selected)
+
+        # 智能排序选中的值
+        sorted_values = self._smart_sort_values(self._field.selected)
+        return ", ".join(str(v) for v in sorted_values)
+
+    def _smart_sort_values(self, values: List[Any]) -> List[Any]:
+        """智能排序值列表
+
+        排序规则：
+        - 纯数字：按数值大小排序
+        - 纯字符串：按字母顺序排序
+        - 混合：数字在前（按数值），字符串在后（按字母）
+
+        Args:
+            values: 待排序的值列表
+
+        Returns:
+            List[Any]: 排序后的值列表
+        """
+        if not values:
+            return []
+
+        # 尝试将所有值转换为数字
+        numeric_values = []
+        string_values = []
+
+        for v in values:
+            str_v = str(v)
+            try:
+                # 尝试转换为整数
+                num = int(str_v)
+                numeric_values.append((num, v))
+            except ValueError:
+                try:
+                    # 尝试转换为浮点数
+                    num = float(str_v)
+                    numeric_values.append((num, v))
+                except ValueError:
+                    # 不是数字，作为字符串处理
+                    string_values.append((str_v.lower(), v))
+
+        # 按数值排序数字
+        numeric_values.sort(key=lambda x: x[0])
+        # 按字母排序字符串
+        string_values.sort(key=lambda x: x[0])
+
+        # 合并结果
+        result = [v for _, v in numeric_values] + [v for _, v in string_values]
+        return result
 
     def on_input_changed(self, event: Input.Changed) -> None:
         """输入框值变化事件处理
@@ -495,10 +584,26 @@ class DynamicFieldWidget(Vertical):
         if event.select != self._select_widget:
             return
 
+        # 如果正在更新选项，忽略所有事件（防止 set_options 触发的事件干扰）
+        if self._updating_options:
+            return
+
         # 获取选中的值
         value = event.value
         if value is None or value == Select.BLANK:
             return  # 选择空项时不做任何操作
+        value = str(value)
+
+        # 纯单选 Select（无输入框）：
+        # - 不走“+/- 快速多选”逻辑
+        # - 不自动重开下拉，避免页面初始化后叠加多个下拉浮层
+        # - 若值未变化则不重复发送事件，避免约束更新风暴
+        if self._input_widget is None:
+            if self._field.selected and str(self._field.selected[0]) == value:
+                return
+            self._field.set_selected([value])
+            self.post_message(self.FieldChanged(self._field.name, [value]))
+            return
 
         # 获取当前输入框中的值
         current_input = self._input_widget.value if self._input_widget else ""
@@ -516,29 +621,35 @@ class DynamicFieldWidget(Vertical):
             # 单选字段：替换现有值
             current_values = [value]
 
+        # 智能排序选中的值
+        sorted_values = self._smart_sort_values(current_values)
+
         # 更新输入框
-        new_input_value = ", ".join(current_values)
+        new_input_value = ", ".join(str(v) for v in sorted_values)
         if self._input_widget:
             self._input_widget.value = new_input_value
 
         # 更新字段选中状态（用于更新 +/- 标记）
-        self._field.set_selected(current_values)
+        self._field.set_selected(sorted_values)
 
         # 更新下拉框选项的 +/- 标记
         self._update_select_options()
 
         # 重置下拉框为空（允许再次选择同一项）
+        # 注意：只有 _allow_blank=True 时才能设置为 BLANK
         self._suppress_events = True
         try:
-            self._select_widget.value = Select.BLANK
+            if self._select_widget._allow_blank:
+                self._select_widget.value = Select.BLANK
+            # 对于不允许空值的 Select，保持当前值不变
         finally:
             self._suppress_events = False
 
-        # 延迟重新打开下拉框，让用户可以继续选择
-        self.set_timer(0.01, self._reopen_select)
+        # 不自动重开下拉框。
+        # 只在用户显式操作时再展开，避免出现“自动点击/自动弹出”。
 
         # 发送消息
-        self.post_message(self.FieldChanged(self._field.name, current_values))
+        self.post_message(self.FieldChanged(self._field.name, sorted_values))
 
     def _reopen_select(self) -> None:
         """重新打开下拉框"""
@@ -634,21 +745,24 @@ class DynamicFieldWidget(Vertical):
         # 更新下拉框选项
         if self._select_widget:
             new_options = self._build_select_options()
-            self._suppress_events = True
+            seq = self._begin_options_update()
             try:
                 self._select_widget.set_options(new_options)
-                # 若当前值不在新选项中，回退到 BLANK（或必填时回退到第一项）
+                # 保持 field.selected 与 Select 当前值一致（包括 set_options 内部回退后的值）
                 current = self._select_widget.value
-                valid_values = {opt[1] for opt in new_options}
-                if current not in valid_values:
-                    if new_options and self._field.required:
-                        self._select_widget.value = str(new_options[0][1])
-                        self._field.set_selected([self._select_widget.value])
-                    else:
-                        self._select_widget.value = Select.BLANK
-                        self._field.clear()
+                valid_values = {str(opt[1]) for opt in new_options}
+                current_str = str(current) if current not in (None, Select.BLANK) else Select.BLANK
+                if current_str in valid_values:
+                    self._field.set_selected([current_str])
+                elif new_options and self._field.required:
+                    fallback = str(new_options[0][1])
+                    self._select_widget.value = fallback
+                    self._field.set_selected([fallback])
+                else:
+                    self._select_widget.value = Select.BLANK
+                    self._field.clear()
             finally:
-                self._suppress_events = False
+                self._end_options_update(seq)
 
         # 更新可选值数量显示
         self._update_count_label()
@@ -734,13 +848,15 @@ class DynamicFieldWidget(Vertical):
         """
         self._suppress_events = True
         try:
-            self._field.set_selected(values)
+            # 智能排序后再存储
+            sorted_values = self._smart_sort_values(values) if values else []
+            self._field.set_selected(sorted_values)
 
             if self._input_widget:
                 self._input_widget.value = self._format_selected_for_input()
             if self._select_widget:
-                if values:
-                    self._select_widget.value = str(values[0])
+                if sorted_values:
+                    self._select_widget.value = str(sorted_values[0])
                 else:
                     self._select_widget.value = Select.BLANK
             if self._switch_widget:

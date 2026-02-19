@@ -22,6 +22,7 @@ from textual.widgets import Button, Input, Label, RadioButton, RadioSet, Select,
 from src.core.config import DownloadConfig
 from src.core.dataset_schema import DynamicFormState, DynamicFormField
 from src.core.task_service import TaskService
+from src.core.ai_generator import AIGenerator, AIGeneratorError
 from src.api.ecmwf_datastores_client import DatastoresService, DatastoresServiceError
 from src.ui.dialogs import RequestPreviewDialog
 from src.ui.widgets.dynamic_form_field import (
@@ -150,7 +151,7 @@ class ConfigContent(Widget):
         border-top: solid $panel;
     }
 
-    #btn-load-schema, #btn-save-config, #btn-load-config {
+    #btn-load-schema, #btn-save-config, #btn-load-config, #btn-ai-generate {
         width: auto;
         min-width: 0;
         padding: 0 1;
@@ -182,6 +183,9 @@ class ConfigContent(Widget):
 
         # 约束更新序号（用于丢弃过期结果）
         self._constraints_seq = 0
+
+        # AI 生成器（延迟初始化）
+        self._ai_generator: Optional[AIGenerator] = None
 
     def _get_datastores_service(self) -> DatastoresService:
         """获取或创建 Datastores 服务实例
@@ -230,6 +234,7 @@ class ConfigContent(Widget):
                     yield Button("在线加载", id="btn-load-schema", variant="primary")
                     yield Button("保存", id="btn-save-config", variant="default")
                     yield Button("读取", id="btn-load-config", variant="default")
+                    yield Button("AI生成", id="btn-ai-generate", variant="default")
                 yield Label("输入数据集 ID 后点击加载", id="schema-status")
 
             # 动态表单区域（初始为空）
@@ -280,6 +285,9 @@ class ConfigContent(Widget):
 
         elif button_id == "btn-load-config":
             self._handle_load_config_file()
+
+        elif button_id == "btn-ai-generate":
+            self._handle_ai_generate()
 
         elif button_id == "btn-preview":
             await self._handle_preview()
@@ -1059,3 +1067,193 @@ class ConfigContent(Widget):
 
         # Tab键交给ContentArea处理（返回侧边栏）
         # 方向键由各个控件自行处理
+
+    def _get_ai_generator(self) -> AIGenerator:
+        """获取或创建 AI 生成器实例"""
+        if self._ai_generator is None:
+            self._ai_generator = AIGenerator()
+        return self._ai_generator
+
+    def _handle_ai_generate(self) -> None:
+        """处理 AI 生成按钮：弹出对话框让用户输入需求"""
+        # 检查表单是否已加载
+        if not self._form_state.is_schema_loaded:
+            self.notify("请先加载数据集 Schema", severity="warning")
+            return
+
+        # 检查 AI 是否配置
+        generator = self._get_ai_generator()
+        if not generator.is_configured:
+            self.notify(
+                "AI 功能未配置，请在 config/ai_config.yaml 中设置 api_key",
+                severity="warning",
+            )
+            return
+
+        # 弹出对话框让用户输入需求
+        from textual.screen import ModalScreen
+        from textual.widgets import TextArea
+
+        class AIGenerateDialog(ModalScreen):
+            """AI 生成对话框"""
+
+            DEFAULT_CSS = """
+            AIGenerateDialog {
+                align: center middle;
+            }
+
+            AIGenerateDialog > Vertical {
+                width: 60;
+                height: auto;
+                max-height: 80%;
+                background: $surface;
+                border: thick $primary;
+                padding: 1 2;
+            }
+
+            AIGenerateDialog Label {
+                margin-bottom: 1;
+            }
+
+            AIGenerateDialog TextArea {
+                width: 1fr;
+                height: 8;
+                margin-bottom: 1;
+                border: round $panel;
+            }
+
+            AIGenerateDialog Horizontal {
+                height: auto;
+                align: center middle;
+            }
+
+            AIGenerateDialog Button {
+                min-width: 10;
+                margin: 0 1;
+            }
+            """
+
+            def __init__(self, callback):
+                super().__init__()
+                self._callback = callback
+
+            def compose(self):
+                with Vertical():
+                    yield Label("AI 生成参数", classes="dialog-title")
+                    yield Label("请描述您需要的数据（如：下载2024年1月的温度数据）")
+                    yield TextArea(
+                        id="ai-request-input",
+                        placeholder="下载2024年1月的温度数据...",
+                    )
+                    with Horizontal():
+                        yield Button("生成", id="btn-confirm-ai", variant="primary")
+                        yield Button("取消", id="btn-cancel-ai", variant="default")
+
+            def on_button_pressed(self, event):
+                if event.button.id == "btn-confirm-ai":
+                    textarea = self.query_one("#ai-request-input", TextArea)
+                    request_text = textarea.text.strip()
+                    if request_text:
+                        self._callback(request_text)
+                    else:
+                        self.app.notify("请输入您的需求", severity="warning")
+                        return
+                    self.dismiss()
+                elif event.button.id == "btn-cancel-ai":
+                    self.dismiss()
+
+            def on_key(self, event):
+                if event.key == "escape":
+                    self.dismiss()
+
+        def do_generate(request_text: str):
+            self._execute_ai_generate(request_text)
+
+        self.app.push_screen(AIGenerateDialog(do_generate))
+
+    def _execute_ai_generate(self, user_request: str) -> None:
+        """执行 AI 生成（异步 Worker）
+
+        Args:
+            user_request: 用户的自然语言需求
+        """
+        self.run_worker(
+            self._do_ai_generate(user_request),
+            name="ai-generate",
+            group="ai-generate",
+            exclusive=True,
+            exit_on_error=False,
+        )
+
+    async def _do_ai_generate(self, user_request: str) -> None:
+        """实际执行 AI 生成
+
+        Args:
+            user_request: 用户的自然语言需求
+        """
+        # 禁用按钮，显示加载状态
+        ai_button = self.query_one("#btn-ai-generate", Button)
+        ai_button.disabled = True
+        self._update_schema_status("AI 正在生成参数...", "loading")
+
+        try:
+            generator = self._get_ai_generator()
+
+            # 准备字段 schema
+            field_schema = {}
+            for field_name, field in self._form_state.fields.items():
+                field_schema[field_name] = {
+                    "field_type": field.field_type.value,
+                    "values": list(field.values),
+                    "selected": [],  # 清空已选项
+                }
+
+            # 调用 AI 生成（网络请求放后台线程）
+            import asyncio
+            result = await asyncio.to_thread(
+                generator.generate,
+                field_schema,
+                user_request,
+            )
+
+            # 将 AI 生成的 selected 应用到表单
+            self._apply_ai_result(result)
+
+            self._update_schema_status(
+                f"AI 生成完成（已填充 {len(result)} 个字段）",
+                "success",
+            )
+            self.notify("AI 参数生成成功", severity="success")
+
+        except AIGeneratorError as e:
+            self._update_schema_status("AI 生成失败", "error")
+            self.notify(f"AI 生成失败: {str(e)}", severity="error", timeout=8)
+        except Exception as e:
+            self._update_schema_status("AI 生成异常", "error")
+            self.notify(f"AI 生成异常: {str(e)}", severity="error", timeout=8)
+        finally:
+            ai_button.disabled = False
+
+    def _apply_ai_result(self, result: Dict[str, Any]) -> None:
+        """将 AI 生成结果应用到表单
+
+        Args:
+            result: AI 生成的字段配置（包含 selected）
+        """
+        container = self.query_one("#dynamic-fields", DynamicFormFieldsContainer)
+
+        for field_name, field_info in result.items():
+            if field_name not in self._form_state.fields:
+                continue
+
+            selected = field_info.get("selected", [])
+            if not selected:
+                continue
+
+            # 更新表单状态
+            self._form_state.set_field_selection(field_name, selected)
+
+            # 更新 UI
+            widget = container.get_field_widget(field_name)
+            if widget:
+                widget.set_selected_values(selected)

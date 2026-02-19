@@ -29,6 +29,7 @@ class DynamicFieldWidget(Vertical):
     - 发送 FieldChanged 消息通知父组件
     - 支持外部更新可选值
     """
+    QUICK_SELECT_PROMPT_VALUE = "__quick_select_prompt__"
 
     DEFAULT_CSS = """
     DynamicFieldWidget {
@@ -62,7 +63,7 @@ class DynamicFieldWidget(Vertical):
 
     .field-select {
         width: 1fr;
-        height: 3;
+        height: auto;
         min-height: 3;
         margin-top: 0;
         border: round $panel;
@@ -79,9 +80,10 @@ class DynamicFieldWidget(Vertical):
 
     .field-select-quick {
         width: 1fr;
-        height: 3;
+        height: auto;
         min-height: 3;
         margin-top: 0;
+        margin-left: 0;
         border: round $panel;
         background: $panel 25%;
         color: $text;
@@ -222,8 +224,8 @@ class DynamicFieldWidget(Vertical):
         """
         placeholder = self._get_placeholder()
         initial_value = self._format_selected_for_input()
+        quick_options = self._build_quick_select_options() if self._field.values else []
 
-        # 输入框先显示
         self._input_widget = Input(
             placeholder=placeholder,
             value=initial_value,
@@ -232,18 +234,16 @@ class DynamicFieldWidget(Vertical):
         )
         yield self._input_widget
 
-        # 如果有可选值，在输入框下方显示下拉选择框
-        if self._field.values:
-            options = self._build_select_options_with_toggle()
-            if options:
-                self._select_widget = Select(
-                    options=options,
-                    value=Select.BLANK,
-                    id=f"select-{self._field.name}",
-                    classes="field-select-quick",
-                    allow_blank=True,
-                )
-                yield self._select_widget
+        # 如果有可选值，在输入框下方显示快速选择
+        if quick_options:
+            self._select_widget = Select(
+                options=quick_options,
+                value=self.QUICK_SELECT_PROMPT_VALUE,
+                id=f"select-{self._field.name}",
+                classes="field-select-quick",
+                allow_blank=False,
+            )
+            yield self._select_widget
 
     def _compose_select(self) -> None:
         """构建下拉选择框控件"""
@@ -272,6 +272,9 @@ class DynamicFieldWidget(Vertical):
             classes="field-select",
             allow_blank=allow_blank,
         )
+        # 明确恢复为旧版可见高度，避免外层样式覆盖导致文字被裁切
+        self._select_widget.styles.height = "auto"
+        self._select_widget.styles.min_height = 3
         yield self._select_widget
 
     def _compose_switch(self) -> None:
@@ -316,7 +319,7 @@ class DynamicFieldWidget(Vertical):
                     value=pressed,
                     name=option_id,
                     id=f"radio-{self._field.name}-{option_id}",
-                    compact=True,
+                    compact=False,
                 )
             )
 
@@ -324,7 +327,7 @@ class DynamicFieldWidget(Vertical):
             *buttons,
             id=f"radio-set-{self._field.name}",
             classes="field-radio-set",
-            compact=True,
+            compact=False,
         )
         yield self._radio_set_widget
 
@@ -392,12 +395,9 @@ class DynamicFieldWidget(Vertical):
         Returns:
             List[tuple]: (显示文本, 值) 元组列表
         """
-        options = []
-        for value in self._field.values:
-            # 显示值和实际值相同
-            options.append((str(value), str(value)))
-        # 按显示文本排序
-        options.sort(key=lambda x: x[0])
+        # 使用智能排序
+        sorted_values = self._smart_sort_values(list(self._field.values))
+        options = [(str(value), str(value)) for value in sorted_values]
         return options
 
     def _build_select_options_with_toggle(self) -> List[tuple]:
@@ -413,13 +413,18 @@ class DynamicFieldWidget(Vertical):
         current_values = set(self._field.selected) if self._field.selected else set()
 
         options = []
-        # 先按原始值排序
-        sorted_values = sorted([str(v) for v in self._field.values])
-        for value_str in sorted_values:
+        # 使用智能排序（数字按数值，字符串按字母）
+        sorted_values = self._smart_sort_values(list(self._field.values))
+        for value in sorted_values:
+            value_str = str(value)
             # 已选中显示 `-`，未选中显示 `+`
             prefix = "-" if value_str in current_values else "+"
             options.append((f"{prefix} {value_str}", value_str))
         return options
+
+    def _build_quick_select_options(self) -> List[tuple]:
+        """构建快速选择按钮的选项列表（含占位项）。"""
+        return [("select", self.QUICK_SELECT_PROMPT_VALUE), *self._build_select_options_with_toggle()]
 
     def _update_select_options(self) -> None:
         """更新下拉框选项，刷新 +/- 标记
@@ -431,7 +436,11 @@ class DynamicFieldWidget(Vertical):
             seq = self._begin_options_update()
             try:
                 # 构建新选项
-                new_options = self._build_select_options_with_toggle()
+                new_options = (
+                    self._build_quick_select_options()
+                    if self._input_widget is not None
+                    else self._build_select_options_with_toggle()
+                )
                 self._select_widget.set_options(new_options)
             finally:
                 self._end_options_update(seq)
@@ -609,6 +618,8 @@ class DynamicFieldWidget(Vertical):
         value = event.value
         if value is None or value == Select.BLANK:
             return  # 选择空项时不做任何操作
+        if value == self.QUICK_SELECT_PROMPT_VALUE:
+            return
         value = str(value)
 
         # 纯单选 Select（无输入框）：
@@ -658,13 +669,13 @@ class DynamicFieldWidget(Vertical):
         # 更新下拉框选项的 +/- 标记
         self._update_select_options()
 
-        # 重置下拉框为空（允许再次选择同一项）
-        # 注意：只有 _allow_blank=True 时才能设置为 BLANK
+        # 重置下拉框到占位项（显示 "select"），以允许重复选择同一项
         self._suppress_events = True
         try:
-            if self._select_widget._allow_blank:
+            if self._input_widget is not None:
+                self._select_widget.value = self.QUICK_SELECT_PROMPT_VALUE
+            elif self._select_widget._allow_blank:
                 self._select_widget.value = Select.BLANK
-            # 对于不允许空值的 Select，保持当前值不变
         finally:
             self._suppress_events = False
 
@@ -770,7 +781,7 @@ class DynamicFieldWidget(Vertical):
         if self._select_widget:
             is_quick_select = self._input_widget is not None
             new_options = (
-                self._build_select_options_with_toggle()
+                self._build_quick_select_options()
                 if is_quick_select
                 else self._build_select_options()
             )
@@ -779,9 +790,9 @@ class DynamicFieldWidget(Vertical):
                 self._select_widget.set_options(new_options)
 
                 # 组合控件（Input + Select）：
-                # Select 仅用于“快速选择”，默认始终保持空值，由用户手动选择。
+                # Select 仅用于“快速选择”，默认保持占位项（select）等待用户选择。
                 if is_quick_select:
-                    self._select_widget.value = Select.BLANK
+                    self._select_widget.value = self.QUICK_SELECT_PROMPT_VALUE
                     if self._input_widget:
                         self._input_widget.value = self._format_selected_for_input()
                 else:
@@ -892,7 +903,9 @@ class DynamicFieldWidget(Vertical):
             if self._input_widget:
                 self._input_widget.value = self._format_selected_for_input()
             if self._select_widget:
-                if sorted_values:
+                if self._input_widget is not None:
+                    self._select_widget.value = self.QUICK_SELECT_PROMPT_VALUE
+                elif sorted_values:
                     self._select_widget.value = str(sorted_values[0])
                 else:
                     self._select_widget.value = Select.BLANK
@@ -930,7 +943,10 @@ class DynamicFieldWidget(Vertical):
             if self._input_widget:
                 self._input_widget.value = ""
             if self._select_widget:
-                self._select_widget.value = Select.BLANK
+                if self._input_widget is not None:
+                    self._select_widget.value = self.QUICK_SELECT_PROMPT_VALUE
+                else:
+                    self._select_widget.value = Select.BLANK
             if self._switch_widget:
                 self._switch_widget.value = False
             if self._radio_set_widget:

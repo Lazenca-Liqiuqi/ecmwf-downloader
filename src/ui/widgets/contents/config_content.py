@@ -1,6 +1,12 @@
 """
 ECMWF Downloader TUI 配置管理内容组件（动态表单版）
 
+!! 弃用警告 !!
+本模块已弃用，请使用新模块：
+    from src.ui.pages.create_task import CreateTaskView
+
+新模块位置：src/ui/pages/create_task/
+
 提供基于数据集 Schema 的动态配置表单，支持：
 - 从 ecmwf-datastores-client 获取数据集字段定义
 - 约束驱动的字段更新（如选择年份后自动更新可选日期）
@@ -8,6 +14,15 @@ ECMWF Downloader TUI 配置管理内容组件（动态表单版）
 
 支持方向键操作：输入框用方向键移动光标，Enter键触发按钮。
 """
+
+import warnings
+
+# 发出弃用警告
+warnings.warn(
+    "config_content.ConfigContent 已弃用，请使用 src.ui.pages.create_task.CreateTaskView",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 import asyncio
 import json

@@ -8,117 +8,108 @@
 
 **版本**：v0.2.1
 
-**日期**：2026-02-19
+**日期**：2026-02-20
 
 **工作目录**：D:\data\project\ECMWF downloader
 
 ## 工作任务
 
-本次对话完成了 Bug 修复、UI 优化和代码审查：
+本次对话完成了配置页面重构任务：
 
 | # | 任务 | 负责者 | 状态 |
 |---|------|--------|------|
-| 1 | 修复清空按钮闪退问题 | Claude Code | ✅ 完成 |
-| 2 | 修改按钮布局（均匀分布） | Claude Code | ✅ 完成 |
-| 3 | 修复预览对话框确认按钮无响应 | Claude Code | ✅ 完成 |
-| 4 | 汇总创建任务页面功能清单 | Claude Code | ✅ 完成 |
-| 5 | 代码审查与修复（三轮） | Claude Code + Codex | ✅ 完成 |
-| 6 | 优化数据集 ID 输入框提示 | Claude Code | ✅ 完成 |
+| 1 | 第一阶段：抽离纯函数与映射逻辑 | Claude Code | ✅ 完成 |
+| 2 | 第二阶段：抽离外部依赖服务 | Claude Code | ✅ 完成 |
+| 3 | 第三阶段：抽离对话框类 | Claude Code | ✅ 完成 |
+| 4 | 第四阶段：引入 Controller | Claude Code | ✅ 完成 |
+| 5 | 第五阶段：弃用旧模块 | Claude Code | ✅ 完成 |
+| 6 | Codex 初审与问题修复 | Claude Code + Codex | ✅ 完成 |
+| 7 | Codex 复审与额外修复 | Claude Code + Codex | ✅ 完成 |
 
 ## 工作内容
 
-### 1. 修复清空按钮闪退问题
+### 1. 配置页面重构
 
-**问题**：点击"清空参数"按钮时，Select 组件的 `value = Select.BLANK` 赋值报错
+将 `src/ui/widgets/contents/config_content.py`（1247 行）按单一职责原则重构为模块化结构。
 
-**根因**：
-- Textual 的 Select 组件不允许直接设置 `Select.BLANK` 作为值
-- 必填字段的 `allow_blank=False`，无法调用 `clear()` 方法
-
-**解决方案**：
-- 非必填字段：使用 `clear()` 方法
-- 必填字段：选择第一个选项，并同步内部状态 `self._field.set_selected([fallback])`
-
-### 2. 修改按钮布局
-
-**修改**：
-- 四个操作按钮（预览、创建任务、清空参数、重置）改为均匀分布
-- "清空"按钮改为"清空参数"
-- 去掉数据集 ID 输入框的示例文本
-
-**CSS 修改**：
-```css
-#actions-section Button {
-    width: 1fr;
-}
+**目标结构**：
+```
+src/ui/pages/create_task/
+├── __init__.py                    # 模块入口
+├── view.py                        # UI 结构
+├── controller.py                  # 事件协调
+├── mappers/
+│   └── form_config_mapper.py      # 表单状态与配置转换
+├── services/
+│   ├── schema_service.py          # Schema 加载与约束
+│   ├── config_store.py            # 配置保存/读取
+│   └── ai_fill_service.py         # AI 参数生成
+└── dialogs/
+    ├── save_config_dialog.py      # 保存配置对话框
+    ├── load_config_dialog.py      # 加载配置对话框
+    └── ai_generate_dialog.py      # AI 生成对话框
 ```
 
-### 3. 修复预览对话框确认按钮无响应
+### 2. Codex 审查与修复
 
-**问题**：预览对话框的"确认创建"按钮点击无反应
+**初审结果**：66/100（C级，需修复）
 
-**根因**：`await push_screen()` 返回值方式不可靠
+**发现问题**：
+| 问题 | 严重度 |
+|------|--------|
+| 加载配置后未恢复静态字段到 UI | 高 |
+| AI 生成结果未同步到控件 | 高 |
+| 创建任务前缺少 dataset 非空校验 | 高 |
+| 兼容性别名未在包级导出 | 中 |
+| 新增静默吞错 | 中 |
 
-**解决方案**：改用回调函数模式
-```python
-def do_create():
-    self._handle_create()
+**修复方案**：
+1. 添加 `on_config_loaded` 回调恢复静态字段
+2. 添加 `on_ai_result_applied` 回调同步 AI 结果到控件
+3. 在 `to_download_config` 添加 dataset 非空校验
+4. 在 `__init__.py` 导出 `ConfigContent` 别名
+5. 将静默吞错改为 `log.warning()`
 
-self.app.push_screen(
-    RequestPreviewDialog(preview_items, split_strategy, callback=do_create)
-)
-```
+**复审结果**：96/100（A级，通过）
 
-### 4. 汇总创建任务页面功能清单
+### 3. Codex 额外修复
 
-**功能列表**：
-| 功能 | 按钮 |
-|------|------|
-| 在线加载 | `btn-load-schema` |
-| 保存配置 | `btn-save-config` |
-| 读取配置 | `btn-load-config` |
-| AI 生成 | `btn-ai-generate` |
-| 预览 | `btn-preview` |
-| 创建任务 | `btn-create` |
-| 清空参数 | `btn-clear` |
-| 重置 | `btn-reset` |
+Codex 在复审后进行了额外优化：
 
-### 5. 代码审查与修复（三轮）
-
-**审查评分变化**：
-| 维度 | 初审 | 第二轮 | 第三轮 | 变化 |
-|------|------|--------|--------|------|
-| 功能完备性 | 78 | 91 | 92 | +14 |
-| 代码清晰度 | 72 | 84 | 86 | +14 |
-| 注释质量 | 84 | 82 | 83 | -1 |
-| 代码结构 | 68 | 72 | 74 | +6 |
-| **综合** | **75** | **84** | **86** | **+11** |
-
-**已修复的问题**：
-1. 年份校验硬编码到 2024 → 改为动态年份
-2. 清空后必填下拉的 UI 与内部状态不一致 → 同步状态
-3. 依赖 Textual 私有属性 `_allow_blank` → 改用 `field.required`
-4. 预览回调类型契约不明确 → 类型注解收紧
-5. 回调异常被静默吞掉 → 添加日志记录
-6. 存在不可达分支 → 删除冗余代码
-7. 配置页双实现并存 → 标记旧实现弃用
-8. `get_form_data` 语义弱化 → 补充注释说明
-
-**暂未处理**：
-- `ConfigContent` 文件职责过重（需要大规模重构）
+| 修复项 | 文件 | 修改内容 |
+|--------|------|----------|
+| Python 3.8 类型注解 | `form_config_mapper.py` | `tuple[...]` → `Tuple[...]` |
+| 日志可观测性 | `schema_service.py` | `apply_constraints` 添加日志 |
+| 日志可观测性 | `config_store.py` | 临时文件清理失败添加日志 |
+| 移除死代码 | `controller.py` / `view.py` | 移除未使用的 `on_constraints_updated` |
 
 ## 交付物
 
-### 修改的文件
+### 新增文件
+
+| 文件 | 职责 | 行数 |
+|------|------|------|
+| `src/ui/pages/__init__.py` | 页面模块入口 | 9 |
+| `src/ui/pages/create_task/__init__.py` | 创建任务模块入口 | 18 |
+| `src/ui/pages/create_task/view.py` | UI 结构定义 | ~480 |
+| `src/ui/pages/create_task/controller.py` | 事件协调与状态管理 | ~480 |
+| `src/ui/pages/create_task/mappers/__init__.py` | 映射器模块入口 | 9 |
+| `src/ui/pages/create_task/mappers/form_config_mapper.py` | 表单配置转换 | ~310 |
+| `src/ui/pages/create_task/services/__init__.py` | 服务模块入口 | 21 |
+| `src/ui/pages/create_task/services/schema_service.py` | Schema 加载 | ~135 |
+| `src/ui/pages/create_task/services/config_store.py` | 配置存储 | ~180 |
+| `src/ui/pages/create_task/services/ai_fill_service.py` | AI 填充 | ~135 |
+| `src/ui/pages/create_task/dialogs/__init__.py` | 对话框模块入口 | 18 |
+| `src/ui/pages/create_task/dialogs/save_config_dialog.py` | 保存对话框 | ~96 |
+| `src/ui/pages/create_task/dialogs/load_config_dialog.py` | 加载对话框 | ~102 |
+| `src/ui/pages/create_task/dialogs/ai_generate_dialog.py` | AI 对话框 | ~101 |
+
+### 修改文件
 
 | 文件 | 修改内容 |
 |------|----------|
-| `src/ui/widgets/dynamic_form_field.py` | 修复清空逻辑、移除私有属性依赖、删除不可达分支 |
-| `src/ui/widgets/contents/config_content.py` | 按钮布局优化、预览回调模式、简化 placeholder |
-| `src/ui/dialogs/request_preview_dialog.py` | 回调模式、类型契约、异常日志、注释补充 |
-| `src/ui/screens/config_screen.py` | 添加弃用注释 |
-| `src/core/config.py` | 年份校验改为动态 |
-| `.claude/request.md` | 审查请求与修改记录 |
+| `src/ui/app.py` | 导入更新为新模块 |
+| `src/ui/widgets/contents/config_content.py` | 添加弃用警告 |
 
 ## 状态变动
 
@@ -126,41 +117,42 @@ self.app.push_screen(
 - 第五阶段（下载功能集成）**继续进行中**
 
 ### 代码质量
-- 审查评分从 75 分提升到 86 分
+- 重构模块通过 Codex 审查，评分 96/100
 
-### 功能变化
-- 修复清空按钮闪退
-- 修复预览确认无响应
-- UI 布局优化
+### 架构改进
+- 配置页面从 1247 行单体文件重构为模块化结构
+- 职责分离：View / Controller / Services / Mappers / Dialogs
+- 兼容性别名保证平滑过渡
 
 ## 工具
 
 ### 主要工具
-- **Claude Code**：功能设计、代码编写、测试验证
-- **Codex**：代码审查与问题分析
+- **Claude Code**：架构设计、模块拆分、代码编写
+- **Codex**：审查、问题发现、修复优化
 
 ### 技术栈
-- **Textual**：TUI 框架（Select、回调模式）
+- **Textual**：TUI 框架（回调模式、组件分离）
 - **pydantic**：配置验证
+- **Python 3.8+**：类型注解兼容性
 
 ## 下一步建议
 
-1. 规划 `ConfigContent` 重构任务（拆分子模块）
+1. 为新模块添加单元测试
 2. 继续第五阶段：下载功能集成
-3. 添加更多测试用例
+3. 考虑移除旧的 `config_content.py`（保留兼容期后）
 
 ## 总结
 
-本次会话完成了 **Bug 修复、UI 优化和代码审查**：
+本次会话完成了 **配置页面重构** 任务：
 
 ### 主要成果
-- ✅ 修复清空按钮闪退问题
-- ✅ 修复预览确认按钮无响应
-- ✅ UI 布局优化（按钮均匀分布）
-- ✅ 代码审查评分从 75 分提升到 86 分
-- ✅ 修复 8 个代码问题
+- ✅ 将 1247 行单体文件重构为 13 个模块化文件
+- ✅ 实现职责分离（View / Controller / Services / Mappers / Dialogs）
+- ✅ 通过 Codex 审查，评分从 66 分提升到 96 分
+- ✅ 修复 5 个功能一致性问题
+- ✅ Codex 额外修复 Python 3.8 兼容性和日志可观测性
 
 ---
 
 **工作人员**：Claude Code + Codex
-**审核状态**：已完成
+**审核状态**：复审通过（96/100）

@@ -15,7 +15,7 @@ from textual.containers import Horizontal
 
 from src.ui.widgets.content_area import ContentArea
 from src.ui.widgets.contents.accounts_content import AccountsContent
-from src.ui.widgets.contents.config_content import ConfigContent
+from src.ui.pages.create_task import CreateTaskView as ConfigContent
 from src.ui.widgets.contents.download_content import DownloadContent
 from src.ui.widgets.contents.home_content import HomeContent
 from src.ui.widgets.contents.tasks_content import TasksContent
@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from src.ui.widgets.contents.tasks_content import TasksContent
     from src.ui.widgets.contents.download_content import DownloadContent
     from src.ui.widgets.contents.accounts_content import AccountsContent
-    from src.ui.widgets.contents.config_content import ConfigContent
+    from src.ui.pages.create_task import CreateTaskView as ConfigContent
 
 
 class ECMWFDownloaderApp(App):

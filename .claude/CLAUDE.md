@@ -5,7 +5,7 @@ ECMWF（European Centre for Medium-Range Weather Forecasts，欧洲中期天气�
 
 ## 项目阶段
 **当前阶段**：第五阶段（下载功能集成）**进行中**
-**版本**：v0.2.1
+**版本**：v0.2.2
 
 ## 目录结构
 ```

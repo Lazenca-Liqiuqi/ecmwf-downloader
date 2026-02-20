@@ -6,7 +6,7 @@
 
 **项目阶段**：第五阶段（下载功能集成）**进行中**
 
-**版本**：v0.2.1
+**版本**：v0.2.3
 
 **日期**：2026-02-20
 
@@ -14,74 +14,66 @@
 
 ## 工作任务
 
-本次对话完成了配置页面重构任务：
+本次对话完成了项目记忆系统检查与重构任务：
 
 | # | 任务 | 负责者 | 状态 |
 |---|------|--------|------|
-| 1 | 第一阶段：抽离纯函数与映射逻辑 | Claude Code | ✅ 完成 |
-| 2 | 第二阶段：抽离外部依赖服务 | Claude Code | ✅ 完成 |
-| 3 | 第三阶段：抽离对话框类 | Claude Code | ✅ 完成 |
-| 4 | 第四阶段：引入 Controller | Claude Code | ✅ 完成 |
-| 5 | 第五阶段：弃用旧模块 | Claude Code | ✅ 完成 |
-| 6 | Codex 初审与问题修复 | Claude Code + Codex | ✅ 完成 |
-| 7 | Codex 复审与额外修复 | Claude Code + Codex | ✅ 完成 |
+| 1 | 清除临时文件 | Claude Code | ✅ 完成 |
+| 2 | 记忆组件位置检查 | Claude Code | ✅ 完成 |
+| 3 | 版本信息检查 | Claude Code | ✅ 完成 |
+| 4 | CLAUDE.md格式重构 | Claude Code | ✅ 完成 |
+| 5 | README.md格式重构 | Claude Code | ✅ 完成 |
+| 6 | CHANGELOG.md重复条目修复 | Claude Code | ✅ 完成 |
+| 7 | 创建src/CLAUDE.md | Claude Code | ✅ 完成 |
 
 ## 工作内容
 
-### 1. 配置页面重构
+### 1. 清除临时文件
 
-将 `src/ui/widgets/contents/config_content.py`（1247 行）按单一职责原则重构为模块化结构。
+删除了项目根目录下的pytest临时文件和缓存：
+- `.coverage` - pytest覆盖率文件
+- `.claude/modify_report.md` - Codex审查报告
+- `pytest-cache-files-test/` - pytest缓存目录（部分因权限问题未能删除）
 
-**目标结构**：
-```
-src/ui/pages/create_task/
-├── __init__.py                    # 模块入口
-├── view.py                        # UI 结构
-├── controller.py                  # 事件协调
-├── mappers/
-│   └── form_config_mapper.py      # 表单状态与配置转换
-├── services/
-│   ├── schema_service.py          # Schema 加载与约束
-│   ├── config_store.py            # 配置保存/读取
-│   └── ai_fill_service.py         # AI 参数生成
-└── dialogs/
-    ├── save_config_dialog.py      # 保存配置对话框
-    ├── load_config_dialog.py      # 加载配置对话框
-    └── ai_generate_dialog.py      # AI 生成对话框
-```
+### 2. 记忆系统检查
 
-### 2. Codex 审查与修复
+**位置检查**：
+- ✅ `README.md`、`CHANGELOG.md` 在根目录
+- ✅ `CLAUDE.md`、`LAST_CLAUDE_PROGRESS.md` 在 `.claude/` 目录
+- ⚠️ `rules/` 目录不存在（继承用户级规则）
 
-**初审结果**：66/100（C级，需修复）
+**版本检查**：
+- Git最新tag：v0.2.3
+- CHANGELOG.md、CLAUDE.md、README.md版本一致
+- 发现CHANGELOG.md有重复的0.0.1条目
 
-**发现问题**：
-| 问题 | 严重度 |
-|------|--------|
-| 加载配置后未恢复静态字段到 UI | 高 |
-| AI 生成结果未同步到控件 | 高 |
-| 创建任务前缺少 dataset 非空校验 | 高 |
-| 兼容性别名未在包级导出 | 中 |
-| 新增静默吞错 | 中 |
+**格式检查**：
+- CLAUDE.md缺少标准章节（当前状态、工作阶段）
+- README.md的TODO章节应改为工作阶段
 
-**修复方案**：
-1. 添加 `on_config_loaded` 回调恢复静态字段
-2. 添加 `on_ai_result_applied` 回调同步 AI 结果到控件
-3. 在 `to_download_config` 添加 dataset 非空校验
-4. 在 `__init__.py` 导出 `ConfigContent` 别名
-5. 将静默吞错改为 `log.warning()`
+### 3. CLAUDE.md重构
 
-**复审结果**：96/100（A级，通过）
+按照标准格式重构：
+- 添加 `## 当前状态` 章节
+- 添加 `## 工作阶段` 章节（TODO语法）
+- 目录结构改为单级
+- 移除多余章节
+- 精简约50%内容
 
-### 3. Codex 额外修复
+### 4. README.md重构
 
-Codex 在复审后进行了额外优化：
+按照标准格式重构：
+- `## TODO` 改为 `## 工作阶段`
+- 添加 `## 使用方法` 章节
+- 保持与CLAUDE.md信息一致
 
-| 修复项 | 文件 | 修改内容 |
-|--------|------|----------|
-| Python 3.8 类型注解 | `form_config_mapper.py` | `tuple[...]` → `Tuple[...]` |
-| 日志可观测性 | `schema_service.py` | `apply_constraints` 添加日志 |
-| 日志可观测性 | `config_store.py` | 临时文件清理失败添加日志 |
-| 移除死代码 | `controller.py` / `view.py` | 移除未使用的 `on_constraints_updated` |
+### 5. 创建src/CLAUDE.md
+
+为src目录创建CLAUDE.md，包含：
+- 单级目录结构
+- 所有Python文件的说明
+- 主要类和函数信息
+- 依赖关系
 
 ## 交付物
 
@@ -89,70 +81,64 @@ Codex 在复审后进行了额外优化：
 
 | 文件 | 职责 | 行数 |
 |------|------|------|
-| `src/ui/pages/__init__.py` | 页面模块入口 | 9 |
-| `src/ui/pages/create_task/__init__.py` | 创建任务模块入口 | 18 |
-| `src/ui/pages/create_task/view.py` | UI 结构定义 | ~480 |
-| `src/ui/pages/create_task/controller.py` | 事件协调与状态管理 | ~480 |
-| `src/ui/pages/create_task/mappers/__init__.py` | 映射器模块入口 | 9 |
-| `src/ui/pages/create_task/mappers/form_config_mapper.py` | 表单配置转换 | ~310 |
-| `src/ui/pages/create_task/services/__init__.py` | 服务模块入口 | 21 |
-| `src/ui/pages/create_task/services/schema_service.py` | Schema 加载 | ~135 |
-| `src/ui/pages/create_task/services/config_store.py` | 配置存储 | ~180 |
-| `src/ui/pages/create_task/services/ai_fill_service.py` | AI 填充 | ~135 |
-| `src/ui/pages/create_task/dialogs/__init__.py` | 对话框模块入口 | 18 |
-| `src/ui/pages/create_task/dialogs/save_config_dialog.py` | 保存对话框 | ~96 |
-| `src/ui/pages/create_task/dialogs/load_config_dialog.py` | 加载对话框 | ~102 |
-| `src/ui/pages/create_task/dialogs/ai_generate_dialog.py` | AI 对话框 | ~101 |
+| `src/CLAUDE.md` | src目录说明 | 195 |
 
 ### 修改文件
 
 | 文件 | 修改内容 |
 |------|----------|
-| `src/ui/app.py` | 导入更新为新模块 |
-| `src/ui/widgets/contents/config_content.py` | 添加弃用警告 |
+| `.claude/CLAUDE.md` | 重构为标准格式 |
+| `README.md` | 重构为标准格式 |
+| `CHANGELOG.md` | 修复重复条目 |
+
+### 删除文件
+
+| 文件 | 说明 |
+|------|------|
+| `.coverage` | pytest覆盖率 |
+| `.claude/modify_report.md` | 审查报告 |
 
 ## 状态变动
 
 ### 项目阶段
 - 第五阶段（下载功能集成）**继续进行中**
 
-### 代码质量
-- 重构模块通过 Codex 审查，评分 96/100
+### 记忆系统改进
+- CLAUDE.md：符合标准格式（7个必需章节）
+- README.md：符合标准格式（7个必需章节 + 可选章节）
+- src/CLAUDE.md：新增子目录记忆
 
-### 架构改进
-- 配置页面从 1247 行单体文件重构为模块化结构
-- 职责分离：View / Controller / Services / Mappers / Dialogs
-- 兼容性别名保证平滑过渡
+### 代码质量
+- 项目文档结构规范化
 
 ## 工具
 
 ### 主要工具
-- **Claude Code**：架构设计、模块拆分、代码编写
-- **Codex**：审查、问题发现、修复优化
+- **Claude Code**：文件检查、重构、创建
 
 ### 技术栈
-- **Textual**：TUI 框架（回调模式、组件分离）
-- **pydantic**：配置验证
-- **Python 3.8+**：类型注解兼容性
+- **Markdown**：文档格式
+- **Git**：版本控制
 
 ## 下一步建议
 
-1. 为新模块添加单元测试
-2. 继续第五阶段：下载功能集成
-3. 考虑移除旧的 `config_content.py`（保留兼容期后）
+1. 继续第五阶段：下载功能集成
+2. 处理剩余的pytest临时目录（需要关闭占用进程）
+3. 为tests/目录添加CLAUDE.md（可选）
 
 ## 总结
 
-本次会话完成了 **配置页面重构** 任务：
+本次会话完成了 **项目记忆系统检查与重构** 任务：
 
 ### 主要成果
-- ✅ 将 1247 行单体文件重构为 13 个模块化文件
-- ✅ 实现职责分离（View / Controller / Services / Mappers / Dialogs）
-- ✅ 通过 Codex 审查，评分从 66 分提升到 96 分
-- ✅ 修复 5 个功能一致性问题
-- ✅ Codex 额外修复 Python 3.8 兼容性和日志可观测性
+- ✅ 清除临时文件
+- ✅ 记忆系统全面检查
+- ✅ CLAUDE.md重构为标准格式
+- ✅ README.md重构为标准格式
+- ✅ 创建src/CLAUDE.md子目录记忆
+- ✅ 修复CHANGELOG.md重复条目
 
 ---
 
-**工作人员**：Claude Code + Codex
-**审核状态**：复审通过（96/100）
+**工作人员**：Claude Code
+**审核状态**：无需审查（文档重构）

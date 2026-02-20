@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.2.3 2026.02.20 账号系统重构与配置系统优化
+
+### 重构
+1. **重构**：账号系统 uid → email
+   - API 认证改为仅使用 `key`（UUID 格式）
+   - `AccountInfo.uid` 改为 `AccountInfo.email`（必填，用于显示标识）
+   - 使用邮箱作为账号唯一标识
+2. **重构**：配置系统
+   - 创建 `config/*.example` 模板文件
+   - 新增 `src/utils/config_initializer.py` 配置初始化模块
+   - 应用启动时自动从 example 复制生成配置文件
+   - 更新 `.gitignore` 忽略 `config/*` 但保留 `*.example`
+
+### UI 优化
+1. **优化**：侧边栏和首页"账号"改为"账号池"
+2. **优化**：账号表格移除"账号ID"列
+3. **优化**：账号对话框移除账号ID输入框
+
+### Bug 修复
+1. **修复**：`accounts.yaml.example` 空列表导致 None 解析错误
+2. **修复**：`AccountTable.get_selected_account_id` 行号映射正确性
+3. **修复**：`account_pool.py` None 迭代防护
+4. **修复**：文档字符串与实现不一致（email 必填说明）
+5. **修复**：移除未使用的 `email` 变量
+
+### 测试更新
+- 更新 7 个测试文件以匹配新的账号模型
+
+---
+
 ## 0.2.2 2026.02.20 配置页面重构与Bug修复
 
 ### 重构

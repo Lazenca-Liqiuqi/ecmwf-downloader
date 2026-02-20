@@ -8,7 +8,7 @@ ECMWF（European Centre for Medium-Range Weather Forecasts）提供全球领先�
 
 ## 当前状态
 
-**版本**：0.2.2
+**版本**：0.2.3
 
 **开发阶段**：第五阶段（下载功能集成）**进行中**
 

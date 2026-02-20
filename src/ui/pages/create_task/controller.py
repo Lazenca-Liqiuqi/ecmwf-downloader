@@ -101,12 +101,11 @@ class CreateTaskController:
         """获取 Schema 服务"""
         if self._schema_service is None:
             # 从账号池获取凭据
-            uid, key, url = None, None, None
+            key, url = None, None
             try:
                 if hasattr(self._app_ref, "account_pool") and self._app_ref.account_pool:
                     account = self._app_ref.account_pool.get_next_account()
                     if account:
-                        uid = account.uid
                         key = account.key
                         url = account.url
             except Exception as e:
@@ -114,7 +113,7 @@ class CreateTaskController:
                 if hasattr(self._view, "log"):
                     self._view.log.warning(f"获取账号凭据失败: {e}")
 
-            self._schema_service = SchemaService(url=url, uid=uid, key=key)
+            self._schema_service = SchemaService(url=url, key=key)
         return self._schema_service
 
     def _get_config_store(self) -> ConfigStore:

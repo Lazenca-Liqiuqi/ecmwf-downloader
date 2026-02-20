@@ -25,7 +25,7 @@ def temp_accounts_file(tmp_path):
         "accounts": [
             {
                 "id": "account_1",
-                "uid": "uid1",
+                "email": "user1@example.com",
                 "key": "key1",
                 "status": "active",
                 "url": "https://cds.climate.copernicus.eu/api",
@@ -35,7 +35,7 @@ def temp_accounts_file(tmp_path):
             },
             {
                 "id": "account_2",
-                "uid": "uid2",
+                "email": "user2@example.com",
                 "key": "key2",
                 "status": "active",
                 "url": "https://cds.climate.copernicus.eu/api",
@@ -45,7 +45,7 @@ def temp_accounts_file(tmp_path):
             },
             {
                 "id": "account_3",
-                "uid": "uid3",
+                "email": "user3@example.com",
                 "key": "key3",
                 "status": "disabled",
                 "url": "https://cds.climate.copernicus.eu/api",
@@ -70,19 +70,19 @@ def sample_accounts():
     return [
         AccountInfo(
             id="account_1",
-            uid="uid1",
+            email="user1@example.com",
             key="key1",
             status=AccountStatus.ACTIVE
         ),
         AccountInfo(
             id="account_2",
-            uid="uid2",
+            email="user2@example.com",
             key="key2",
             status=AccountStatus.ACTIVE
         ),
         AccountInfo(
             id="account_3",
-            uid="uid3",
+            email="user3@example.com",
             key="key3",
             status=AccountStatus.DISABLED
         ),
@@ -211,7 +211,7 @@ class TestAccountPoolGetNext:
         all_disabled = [
             AccountInfo(
                 id="acc1",
-                uid="uid",
+                email="disabled@example.com",
                 key="key",
                 status=AccountStatus.DISABLED
             )
@@ -327,7 +327,7 @@ class TestAccountPoolManagement:
 
         new_account = AccountInfo(
             id="account_4",
-            uid="uid4",
+            email="user4@example.com",
             key="key4"
         )
         pool.add_account(new_account)
@@ -346,7 +346,7 @@ class TestAccountPoolManagement:
 
         duplicate = AccountInfo(
             id="account_1",  # 已存在
-            uid="new_uid",
+            email="new@example.com",
             key="new_key"
         )
 
@@ -451,7 +451,7 @@ class TestAccountPoolQuery:
         pool.auto_disable_threshold = 5
 
         accounts = pool.get_all_accounts()
-        accounts.append(AccountInfo(id="fake", uid="u", key="k"))
+        accounts.append(AccountInfo(id="fake", email="fake@example.com", key="k"))
 
         # 原始列表不应改变
         assert pool.get_total_count() == 3

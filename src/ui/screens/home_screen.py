@@ -56,7 +56,7 @@ class HomeScreen(BaseScreen):
             with Horizontal(id="actions-container"):
                 yield Button("任务列表", id="btn-tasks", variant="default")
                 yield Button("下载管理", id="btn-download", variant="default")
-                yield Button("账号管理", id="btn-accounts", variant="default")
+                yield Button("账号池", id="btn-accounts", variant="default")
                 yield Button("创建任务", id="btn-config", variant="default")
 
             # 最近任务区域

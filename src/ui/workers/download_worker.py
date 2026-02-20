@@ -99,14 +99,14 @@ class DownloadWorker:
                 task_id, TaskStatus.DOWNLOADING
             )
             self.app.progress_manager.set_account(
-                task_id, account.account_id
+                task_id, account.id
             )
 
             # 创建CDS客户端
             client = CDSClient(
                 account_info={
-                    "uid": account.uid,
-                    "key": account.api_key,
+                    "email": account.email,
+                    "key": account.key,
                     "url": account.url,
                 }
             )

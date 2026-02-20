@@ -8,14 +8,15 @@ ai:
   enabled: true
 
   # OpenAI 兼容 API 配置
-  base_url: "https://open.bigmodel.cn/api/paas/v4"
+  # 支持的提供商：OpenAI、智谱 AI、Ollama 等
+  base_url: "https://api.openai.com/v1"  # 或其他兼容 API 地址
   api_key: ""  # 请填写您的 API Key
-  model: "glm-4.7"
+  model: "gpt-4o-mini"  # 或其他模型
 
   # 请求参数
-  temperature: 0.3  # 较低温度保证输出稳定
+  temperature: 0.3 # 较低温度保证输出稳定
   max_tokens: 8192
-  timeout: 120  # 请求超时时间（秒）
+  timeout: 120 # 请求超时时间（秒）
 
   # 系统提示词（定义 AI 如何理解和生成参数）
   # 您可以在这里修改提示词来调整 AI 的行为

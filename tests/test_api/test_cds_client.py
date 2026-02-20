@@ -18,7 +18,7 @@ from src.core.exceptions import APIError
 def sample_account():
     """创建示例账号信息"""
     return {
-        "uid": "test_uid",
+        "email": "test@example.com",
         "key": "test_api_key",
         "url": "https://cds.climate.copernicus.eu/api"
     }
@@ -36,38 +36,31 @@ class TestCDSClientInit:
     def test_init_with_required_fields(self):
         """测试使用必填字段初始化"""
         account = {
-            "uid": "my_uid",
-            "key": "my_key"
+            "email": "my@example.com",
+            "key": "my_key",
         }
         client = CDSClient(account_info=account)
 
-        assert client.uid == "my_uid"
+        assert client.email == "my@example.com"
         assert client.key == "my_key"
         assert client.url == "https://cds.climate.copernicus.eu/api"
 
     def test_init_with_custom_url(self):
         """测试使用自定义URL初始化"""
         account = {
-            "uid": "uid",
             "key": "key",
+            "email": "user@example.com",
             "url": "https://custom.api.com"
         }
         client = CDSClient(account_info=account)
 
         assert client.url == "https://custom.api.com"
 
-    def test_init_without_uid_raises_error(self):
-        """测试缺少uid时抛出异常"""
-        account = {"key": "key"}
-
-        with pytest.raises(ValueError, match="account_info必须包含uid和key字段"):
-            CDSClient(account_info=account)
-
     def test_init_without_key_raises_error(self):
         """测试缺少key时抛出异常"""
-        account = {"uid": "uid"}
+        account = {"email": "user@example.com"}
 
-        with pytest.raises(ValueError, match="account_info必须包含uid和key字段"):
+        with pytest.raises(ValueError, match="account_info必须包含key字段"):
             CDSClient(account_info=account)
 
     def test_init_disables_proxy(self, sample_account):
@@ -382,8 +375,8 @@ class TestCDSClientRepr:
         repr_str = repr(client)
 
         assert "CDSClient" in repr_str
-        assert "test_uid" in repr_str
-        assert "test_" in repr_str  # 密钥应该被部分遮蔽
+        assert "test@example.com" in repr_str
+        assert "test..._key" in repr_str  # 密钥应该被部分遮蔽
         assert "api_key" not in repr_str  # 完整密钥不应出现
 
 

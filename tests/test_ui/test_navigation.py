@@ -39,7 +39,7 @@ account_pool:
     accounts_file.write_text("""
 accounts:
   - id: test-account
-    uid: test@example.com
+    email: test@example.com
     key: test-key-123
     status: active
 """)

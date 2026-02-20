@@ -34,7 +34,7 @@ def sample_accounts():
     return [
         AccountInfo(
             id="account-001",
-            uid="user1@example.com",
+            email="user1@example.com",
             key="abc123-def456-ghi789",
             status=AccountStatus.ACTIVE,
             used_count=10,
@@ -43,7 +43,7 @@ def sample_accounts():
         ),
         AccountInfo(
             id="account-002",
-            uid="user2@example.com",
+            email="user2@example.com",
             key="xyz789-uvw123-rst456",
             status=AccountStatus.FAILED,
             used_count=5,
@@ -52,7 +52,7 @@ def sample_accounts():
         ),
         AccountInfo(
             id="account-003",
-            uid="user3@example.com",
+            email="user3@example.com",
             key="mno123-pqr456-stu789",
             status=AccountStatus.DISABLED,
             used_count=15,
@@ -67,9 +67,9 @@ class TestAccountTableMount:
 
     async def test_on_mount_initializes_columns(self, account_table):
         """测试挂载时正确初始化列"""
-        # 验证列的数量（列数应该是6个）
+        # 验证列的数量（列数应该是5个：邮箱、状态、使用次数、失败次数、最后使用）
         column_count = len(list(account_table.columns))
-        assert column_count == 6
+        assert column_count == 5
 
     async def test_on_mount_sets_cursor_type(self, account_table):
         """测试挂载时设置光标类型为行"""
@@ -138,7 +138,7 @@ class TestAccountTableUpdateRow:
         # 更新账号状态和使用统计
         updated_account = AccountInfo(
             id="account-002",
-            uid="user2@example.com",
+            email="user2@example.com",
             key="xyz789-uvw123-rst456",
             status=AccountStatus.ACTIVE,
             used_count=6,
@@ -168,7 +168,7 @@ class TestAccountTableUpdateRow:
         # 更新一个不存在的账号
         new_account = AccountInfo(
             id="account-004",
-            uid="user4@example.com",
+            email="user4@example.com",
             key="new123-key456-val789",
             status=AccountStatus.ACTIVE,
             used_count=0,
@@ -234,10 +234,9 @@ class TestAccountTableGetSelectedAccountId:
         # 加载账号
         account_table.load_accounts(sample_accounts)
 
-        # 模拟选中第一行（设置cursor_row）
-        # 注意：这需要访问DataTable的内部API
-        # 实际测试中，我们可能需要使用异步点击事件
-        # 这里我们只测试None的情况，实际的选中测试需要更复杂的设置
+        # 选中第一行：按 used_count 降序排序，第一行应为 account-003
+        account_table.move_cursor(row=0, column=0)
+        assert account_table.get_selected_account_id() == "account-003"
 
 
 class TestAccountTableFormatHelpers:

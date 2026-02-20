@@ -20,6 +20,7 @@ from src.ui.widgets.contents.download_content import DownloadContent
 from src.ui.widgets.contents.home_content import HomeContent
 from src.ui.widgets.contents.tasks_content import TasksContent
 from src.ui.widgets.navigation_sidebar import NavigationSidebar
+from src.utils.config_initializer import initialize_config
 
 if TYPE_CHECKING:
     from src.core.account_pool import AccountPool
@@ -600,7 +601,7 @@ class ECMWFDownloaderApp(App):
         ("h", "go_home", "首页"),
         ("t", "go_tasks", "任务"),
         ("d", "go_download", "下载"),
-        ("a", "go_accounts", "账号"),
+        ("a", "go_accounts", "账号池"),
         ("c", "go_config", "创建任务"),
     ]
 
@@ -654,6 +655,9 @@ class ECMWFDownloaderApp(App):
         在应用启动后、显示第一个屏幕前调用。
         用于初始化应用状态、加载数据等。
         """
+        # 初始化配置文件（如果不存在则从 example 复制）
+        initialize_config()
+
         self.log.info("ECMWF Downloader TUI 启动")
         self.log.info(f"配置文件: {self._config_path}")
         self.log.info(f"账号配置: {self._accounts_path}")

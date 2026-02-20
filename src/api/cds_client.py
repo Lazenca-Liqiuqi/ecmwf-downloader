@@ -61,16 +61,18 @@ class CDSClient(BaseAPIClient):
 
         Args:
             account_info: 账号信息字典，必须包含：
-                - uid: ECMWF用户ID
-                - key: API密钥
-                - url: API端点URL（默认为CDS官方地址）
+                - email: 账号邮箱（用于显示标识，必填）
+                - key: API密钥（UUID格式，必填）
+                - url: API端点URL（可选，默认为CDS官方地址）
         """
         super().__init__(account_info)
 
-        if not account_info or "uid" not in account_info or "key" not in account_info:
-            raise ValueError("account_info必须包含uid和key字段")
+        if not account_info or "key" not in account_info:
+            raise ValueError("account_info必须包含key字段")
+        if "email" not in account_info:
+            raise ValueError("account_info必须包含email字段")
 
-        self.uid = account_info["uid"]
+        self.email = account_info["email"]
         self.key = account_info["key"]
         self.url = account_info.get("url", "https://cds.climate.copernicus.eu/api")
 
@@ -98,7 +100,7 @@ class CDSClient(BaseAPIClient):
         if self._client is None:
             self._client = cdsapi.Client(
                 url=self.url,
-                key=f"{self.uid}:{self.key}",
+                key=self.key,
                 timeout=1800,  # 30分钟超时
                 verify=True,  # 启用SSL验证
             )
@@ -229,6 +231,10 @@ class CDSClient(BaseAPIClient):
         # 添加区域范围（如果提供）
         if area is not None:
             request["area"] = area
+
+        # 添加网格分辨率（如果提供）
+        if "grid" in kwargs and kwargs.get("grid") is not None:
+            request["grid"] = kwargs["grid"]
 
         return request
 
@@ -362,7 +368,7 @@ class CDSClient(BaseAPIClient):
         # 解析常见错误
         if "401" in error_msg or "Unauthorized" in error_msg:
             raise APIError(
-                "API认证失败：请检查uid和key是否正确",
+                "API认证失败：请检查key是否正确",
                 status_code=status_code,
                 response_body=error_msg,
             )
@@ -401,4 +407,4 @@ class CDSClient(BaseAPIClient):
     def __repr__(self) -> str:
         """返回客户端的字符串表示"""
         mask_key = f"{self.key[:4]}...{self.key[-4:]}" if self.key else "unknown"
-        return f"CDSClient(uid={self.uid}, key={mask_key})"
+        return f"CDSClient(email={self.email}, key={mask_key})"

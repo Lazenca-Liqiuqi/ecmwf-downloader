@@ -21,17 +21,14 @@ class TestDatastoresServiceInit:
         """测试使用凭据创建服务"""
         service = DatastoresService(
             url="https://test.api.com",
-            uid="test_uid",
             key="test_key",
         )
         assert service.url == "https://test.api.com"
-        assert service.uid == "test_uid"
         assert service.key == "test_key"
 
     def test_create_without_credentials(self):
         """测试不使用凭据创建服务"""
         service = DatastoresService()
-        assert service.uid is None
         assert service.key is None
 
 

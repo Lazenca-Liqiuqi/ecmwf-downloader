@@ -208,14 +208,13 @@ class ConfigContent(Widget):
         """
         if self._datastores_service is None:
             # 从应用账号池获取凭据
-            uid, key, url = None, None, None
+            key, url = None, None
 
             try:
                 if hasattr(self._app_ref, 'account_pool') and self._app_ref.account_pool:
                     # 使用 get_next_account 获取可用账号
                     account = self._app_ref.account_pool.get_next_account()
                     if account:
-                        uid = account.uid
                         key = account.key
                         url = account.url
                         self.log.info(f"使用账号 {account.id} 的凭据")
@@ -224,7 +223,6 @@ class ConfigContent(Widget):
 
             self._datastores_service = DatastoresService(
                 url=url or "https://cds.climate.copernicus.eu/api",
-                uid=uid,
                 key=key,
             )
         return self._datastores_service

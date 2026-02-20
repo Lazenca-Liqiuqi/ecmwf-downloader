@@ -18,10 +18,10 @@ class AccountDialog(BaseDialog):
 
     功能：
     - 支持添加（add）和编辑（edit）两种模式
-    - 表单字段：账号ID、UID、API Key（密码掩码）、API URL（可选）
-    - 表单验证：必填字段检查、ID格式校验
+    - 表单字段：邮箱（必填）、API Key（密码掩码，必填）、API URL（可选）
+    - 表单验证：必填字段检查
     - 编辑模式下预填充现有数据
-    - 编辑模式下禁用ID输入
+    - 使用邮箱作为账号唯一标识
 
     Usage:
         # 添加账号
@@ -151,23 +151,13 @@ class AccountDialog(BaseDialog):
 
             # 表单内容
             with Vertical(classes="dialog-content"):
-                # 账号ID
+                # 邮箱
                 with Vertical(classes="form-row"):
-                    yield Label("账号ID *", classes="form-label")
+                    yield Label("邮箱 *", classes="form-label")
                     yield Input(
-                        placeholder="例如: account_1",
-                        id="input-id",
-                        value=self._account_data.get("id", ""),
-                        disabled=(self._mode == "edit"),  # 编辑模式下禁用
-                    )
-
-                # UID
-                with Vertical(classes="form-row"):
-                    yield Label("ECMWF UID *", classes="form-label")
-                    yield Input(
-                        placeholder="例如: 123456",
-                        id="input-uid",
-                        value=self._account_data.get("uid", ""),
+                        placeholder="例如: user@example.com",
+                        id="input-email",
+                        value=self._account_data.get("email", ""),
                     )
 
                 # API Key
@@ -204,12 +194,8 @@ class AccountDialog(BaseDialog):
         error_label = self.query_one("#error-message", Label)
         error_label.display = False
 
-        # 添加模式下，聚焦到第一个输入框
-        if self._mode == "add":
-            self.query_one("#input-id", Input).focus()
-        else:
-            # 编辑模式下，聚焦到UID输入框
-            self.query_one("#input-uid", Input).focus()
+        # 聚焦到邮箱输入框
+        self.query_one("#input-email", Input).focus()
 
     def get_form_data(self) -> Optional[Dict[str, Any]]:
         """收集并验证表单数据
@@ -218,41 +204,28 @@ class AccountDialog(BaseDialog):
             Optional[Dict[str, Any]]: 验证通过返回表单数据，否则返回 None
         """
         # 获取输入值
-        input_id = self.query_one("#input-id", Input)
-        input_uid = self.query_one("#input-uid", Input)
+        input_email = self.query_one("#input-email", Input)
         input_key = self.query_one("#input-key", Input)
         input_url = self.query_one("#input-url", Input)
 
-        account_id = input_id.value.strip()
-        uid = input_uid.value.strip()
+        email = input_email.value.strip()
         key = input_key.value.strip()
         url = input_url.value.strip()
 
         # 验证必填字段
         errors = []
 
-        if not account_id:
-            errors.append("账号ID不能为空")
-            input_id.add_class("-invalid")
+        if not email:
+            errors.append("邮箱不能为空")
+            input_email.add_class("-invalid")
         else:
-            input_id.remove_class("-invalid")
-
-        if not uid:
-            errors.append("UID不能为空")
-            input_uid.add_class("-invalid")
-        else:
-            input_uid.remove_class("-invalid")
+            input_email.remove_class("-invalid")
 
         if not key:
             errors.append("API Key不能为空")
             input_key.add_class("-invalid")
         else:
             input_key.remove_class("-invalid")
-
-        # ID格式验证（只允许字母、数字、下划线、连字符）
-        if account_id and not all(c.isalnum() or c in "_-" for c in account_id):
-            errors.append("账号ID只能包含字母、数字、下划线和连字符")
-            input_id.add_class("-invalid")
 
         # 显示错误
         if errors:
@@ -262,10 +235,10 @@ class AccountDialog(BaseDialog):
         # 清除错误
         self.clear_error()
 
-        # 构建返回数据
+        # 构建返回数据（id 使用邮箱）
         result = {
-            "id": account_id,
-            "uid": uid,
+            "id": email,  # 使用邮箱作为唯一标识
+            "email": email,
             "key": key,
         }
 

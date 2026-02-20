@@ -26,7 +26,7 @@ class BaseAPIClient(ABC):
 
         Args:
             account_info: 账号信息字典，包含认证凭据等
-                - uid: 用户ID
+                - email: 账号邮箱（用于显示标识）
                 - key: API密钥
                 - url: API端点URL（可选）
         """
@@ -163,10 +163,10 @@ class BaseAPIClient(ABC):
         """
         return {
             "client_type": self.__class__.__name__,
-            "account_uid": self.account_info.get("uid", "unknown"),
+            "account_email": self.account_info.get("email", "unknown"),
             "api_url": self.account_info.get("url", "unknown"),
         }
 
     def __repr__(self) -> str:
         """返回客户端的字符串表示"""
-        return f"{self.__class__.__name__}(uid={self.account_info.get('uid', 'unknown')})"
+        return f"{self.__class__.__name__}(email={self.account_info.get('email', 'unknown')})"

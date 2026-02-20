@@ -47,11 +47,11 @@ class TestAccountInfo:
         """测试使用必填字段创建账号信息"""
         account = AccountInfo(
             id="account_1",
-            uid="test_uid",
+            email="test@example.com",
             key="test_key"
         )
         assert account.id == "account_1"
-        assert account.uid == "test_uid"
+        assert account.email == "test@example.com"
         assert account.key == "test_key"
         assert account.status == AccountStatus.ACTIVE  # 默认值
         assert account.url == "https://cds.climate.copernicus.eu/api"  # 默认值
@@ -62,7 +62,7 @@ class TestAccountInfo:
         """测试使用所有字段创建账号信息"""
         account = AccountInfo(
             id="account_2",
-            uid="another_uid",
+            email="another@example.com",
             key="another_key",
             status=AccountStatus.DISABLED,
             url="https://custom.api.com",
@@ -80,7 +80,7 @@ class TestAccountInfo:
         with pytest.raises(ValidationError):
             AccountInfo(
                 id="account_1",
-                uid="uid",
+                email="user@example.com",
                 key="key",
                 used_count=-1
             )
@@ -90,7 +90,7 @@ class TestAccountInfo:
         with pytest.raises(ValidationError):
             AccountInfo(
                 id="account_1",
-                uid="uid",
+                email="user@example.com",
                 key="key",
                 fail_count=-1
             )
@@ -108,8 +108,8 @@ class TestAccountPoolConfig:
     def test_create_with_accounts(self):
         """测试创建包含账号的配置"""
         accounts = [
-            AccountInfo(id="acc1", uid="uid1", key="key1"),
-            AccountInfo(id="acc2", uid="uid2", key="key2"),
+            AccountInfo(id="acc1", email="user1@example.com", key="key1"),
+            AccountInfo(id="acc2", email="user2@example.com", key="key2"),
         ]
         config = AccountPoolConfig(accounts=accounts)
         assert len(config.accounts) == 2
@@ -117,8 +117,8 @@ class TestAccountPoolConfig:
     def test_unique_account_ids(self):
         """测试账号ID必须唯一"""
         accounts = [
-            AccountInfo(id="acc1", uid="uid1", key="key1"),
-            AccountInfo(id="acc1", uid="uid2", key="key2"),  # 重复ID
+            AccountInfo(id="acc1", email="user1@example.com", key="key1"),
+            AccountInfo(id="acc1", email="user2@example.com", key="key2"),  # 重复ID
         ]
         with pytest.raises(ValidationError, match="账号ID必须唯一"):
             AccountPoolConfig(accounts=accounts)
@@ -136,9 +136,9 @@ class TestAccountPoolConfig:
     def test_get_active_accounts(self):
         """测试获取可用账号"""
         accounts = [
-            AccountInfo(id="acc1", uid="uid1", key="key1", status=AccountStatus.ACTIVE),
-            AccountInfo(id="acc2", uid="uid2", key="key2", status=AccountStatus.DISABLED),
-            AccountInfo(id="acc3", uid="uid3", key="key3", status=AccountStatus.ACTIVE),
+            AccountInfo(id="acc1", email="user1@example.com", key="key1", status=AccountStatus.ACTIVE),
+            AccountInfo(id="acc2", email="user2@example.com", key="key2", status=AccountStatus.DISABLED),
+            AccountInfo(id="acc3", email="user3@example.com", key="key3", status=AccountStatus.ACTIVE),
         ]
         config = AccountPoolConfig(accounts=accounts)
         active = config.get_active_accounts()
@@ -443,7 +443,7 @@ class TestAppConfig:
                 "accounts": [
                     {
                         "id": "acc1",
-                        "uid": "uid1",
+                        "email": "user1@example.com",
                         "key": "key1"
                     }
                 ]
@@ -464,7 +464,7 @@ class TestAppConfig:
                 output_dir=tmp_path
             ),
             account_pool=AccountPoolConfig(
-                accounts=[AccountInfo(id="acc1", uid="uid", key="key")]
+                accounts=[AccountInfo(id="acc1", email="user@example.com", key="key")]
             )
         )
         data = config.to_dict()

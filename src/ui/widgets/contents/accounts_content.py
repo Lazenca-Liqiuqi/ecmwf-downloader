@@ -85,7 +85,7 @@ class AccountsContent(Widget):
         # 主容器
         with Container(id="accounts-container", classes="content-container"):
             # 标题
-            yield Label("账号管理", id="accounts-title", classes="page-title")
+            yield Label("账号池", id="accounts-title", classes="page-title")
 
             # 账号表格
             with Vertical(id="table-section", classes="table-section"):
@@ -170,7 +170,7 @@ class AccountsContent(Widget):
         # 创建新的账号信息
         new_account = AccountInfo(
             id=result["id"],
-            uid=result["uid"],
+            email=result["email"],
             key=result["key"],
             url=result.get("url", "https://cds.climate.copernicus.eu/api"),
             status=AccountStatus.ACTIVE,
@@ -227,7 +227,7 @@ class AccountsContent(Widget):
         # 准备对话框数据（只传递可编辑字段）
         account_data = {
             "id": existing_account.id,
-            "uid": existing_account.uid,
+            "email": existing_account.email,
             "key": existing_account.key,
             "url": existing_account.url,
         }
@@ -252,12 +252,14 @@ class AccountsContent(Widget):
             return
 
         # 保存原始值用于回滚
-        old_uid = original_account.uid
+        old_id = original_account.id
+        old_email = original_account.email
         old_key = original_account.key
         old_url = original_account.url
 
-        # 更新账号信息（保留统计数据）
-        original_account.uid = result["uid"]
+        # 更新账号信息（id 使用邮箱，保留统计数据）
+        original_account.id = result["email"]  # id 始终与邮箱一致
+        original_account.email = result["email"]
         original_account.key = result["key"]
         original_account.url = result.get("url", "https://cds.climate.copernicus.eu/api")
 
@@ -273,7 +275,8 @@ class AccountsContent(Widget):
 
         except Exception as e:
             # 保存失败，回滚内存变更
-            original_account.uid = old_uid
+            original_account.id = old_id
+            original_account.email = old_email
             original_account.key = old_key
             original_account.url = old_url
             self.notify(f"保存账号配置失败: {str(e)}", severity="error")

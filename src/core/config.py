@@ -36,11 +36,13 @@ class AccountInfo(BaseModel):
     """单个账号信息模型
 
     用于账号池管理，记录每个API账号的配置和状态。
+
+    注意：email 用于界面显示标识，不参与 API 认证，但为必填项以便识别账号。
     """
 
     id: str = Field(..., description="账号唯一标识符")
-    uid: str = Field(..., description="ECMWF用户ID")
-    key: str = Field(..., description="ECMWF API密钥")
+    email: str = Field(..., description="CDS账号邮箱（用于显示标识，必填）")
+    key: str = Field(..., description="CDS API密钥（UUID格式）")
     status: AccountStatus = Field(default=AccountStatus.ACTIVE, description="账号状态")
     url: str = Field(default="https://cds.climate.copernicus.eu/api", description="CDS API地址")
     used_count: int = Field(default=0, description="已使用次数", ge=0)

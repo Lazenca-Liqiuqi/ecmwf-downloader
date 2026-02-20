@@ -48,6 +48,8 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+pytest-cache-files-*/
+.tmp/
 
 # Translations
 *.mo
@@ -134,7 +136,8 @@ dmypy.json
 *.cdsapirc
 
 # Project specific
-/config/
+/config/*
+!config/*.example
 data/
 downloads/
 output/

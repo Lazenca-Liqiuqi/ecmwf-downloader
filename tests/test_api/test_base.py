@@ -104,7 +104,7 @@ class TestBaseAPIClientInit:
             def get_request_info(self, dataset, params):
                 pass
 
-        account = {"uid": "test", "key": "key"}
+        account = {"email": "test@example.com", "key": "key"}
         client = ConcreteAPIClient(account_info=account)
 
         assert client.account_info == account
@@ -306,7 +306,7 @@ class TestGetClientInfo:
                 pass
 
         account = {
-            "uid": "test_uid",
+            "email": "test@example.com",
             "key": "test_key",
             "url": "https://api.example.com"
         }
@@ -315,7 +315,7 @@ class TestGetClientInfo:
         info = client.get_client_info()
 
         assert info["client_type"] == "ConcreteAPIClient"
-        assert info["account_uid"] == "test_uid"
+        assert info["account_email"] == "test@example.com"
         assert info["api_url"] == "https://api.example.com"
 
 
@@ -346,8 +346,8 @@ class TestRepr:
         repr_str = repr(client)
 
         assert "ConcreteAPIClient" in repr_str
-        # account_info是空字典时，uid会返回"unknown"
-        assert "uid=unknown" in repr_str
+        # account_info是空字典时，email会返回"unknown"
+        assert "email=unknown" in repr_str
 
     def test_repr_with_account_info(self):
         """测试有账号信息时的字符串表示"""
@@ -368,10 +368,10 @@ class TestRepr:
             def get_request_info(self, dataset, params):
                 pass
 
-        account = {"uid": "my_uid", "key": "my_key"}
+        account = {"email": "my@example.com", "key": "my_key"}
         client = ConcreteAPIClient(account_info=account)
 
         repr_str = repr(client)
 
         assert "ConcreteAPIClient" in repr_str
-        assert "uid=my_uid" in repr_str
+        assert "email=my@example.com" in repr_str

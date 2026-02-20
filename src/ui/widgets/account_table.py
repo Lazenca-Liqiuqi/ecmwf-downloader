@@ -7,7 +7,6 @@ ECMWF Downloader TUI 账号表格组件
 from typing import List
 
 from textual.widgets import DataTable
-from textual.widgets._data_table import RowDoesNotExist
 
 from src.core.config import AccountInfo, AccountStatus
 
@@ -16,7 +15,7 @@ class AccountTable(DataTable):
     """账号列表表格组件
 
     功能：
-    - 显示账号列表（ID、UID、状态、使用次数、失败次数、最后使用时间）
+    - 显示账号列表（ID、邮箱、状态、使用次数、失败次数、最后使用时间）
     - 状态颜色标记
     - 实时更新单行数据
     - 斑马纹显示
@@ -35,8 +34,7 @@ class AccountTable(DataTable):
         self.zebra_stripes = True
 
         # 添加列
-        self.add_column("账号ID", width=15)
-        self.add_column("UID", width=25)
+        self.add_column("邮箱", width=35)
         self.add_column("状态", width=10)
         self.add_column("使用次数", width=10)
         self.add_column("失败次数", width=10)
@@ -71,8 +69,7 @@ class AccountTable(DataTable):
 
         # 添加行（使用账号ID作为行键，便于后续更新）
         row_key = self.add_row(
-            account.id,
-            account.uid,
+            account.email,
             status_text,
             str(account.used_count),
             str(account.fail_count),
@@ -140,21 +137,24 @@ class AccountTable(DataTable):
     def get_selected_account_id(self) -> str | None:
         """获取当前选中行的账号ID
 
+        避免使用行号映射（行删除/插入后会变化），通过 DataTable 的公共 API
+        `get_row_index(row_key)` 反查当前光标所在行对应的行键（row_key=账号ID）。
+
         Returns:
             Optional[str]: 账号ID，如果没有选中则返回None
         """
         if self.cursor_row is None:
             return None
 
-        # 获取整行数据，取第一列（账号ID）
-        try:
-            row_values = self.get_row_at(self.cursor_row)
-            if row_values and len(row_values) > 0:
-                # get_row_at 返回的是值列表，不是 Cell 对象
-                return str(row_values[0])
-        except (IndexError, KeyError, RowDoesNotExist):
-            # 行索引无效（表格为空或行不存在）
-            pass
+        # 通过 row_key（账号ID）反查当前行号，匹配 cursor_row
+        for account_id in list(self._account_row_map.keys()):
+            try:
+                if self.get_row_index(account_id) == self.cursor_row:
+                    return account_id
+            except Exception:
+                # 行键不存在或表格状态变化，忽略继续查找
+                continue
+
         return None
 
     def _format_status_text(self, status: AccountStatus) -> str:

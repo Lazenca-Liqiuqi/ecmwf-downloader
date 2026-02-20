@@ -38,7 +38,7 @@ class SchemaService:
     封装 DatastoresService 的 Schema 相关操作，提供更友好的接口。
 
     使用示例:
-        service = SchemaService(url, uid, key)
+        service = SchemaService(url, key=key)
         result = service.load_schema("reanalysis-era5-pressure-levels")
         if result.success:
             print(f"加载成功: {result.title}")
@@ -47,19 +47,17 @@ class SchemaService:
     def __init__(
         self,
         url: Optional[str] = None,
-        uid: Optional[str] = None,
         key: Optional[str] = None,
         datastores_service: Optional[DatastoresService] = None,
     ):
         """初始化 Schema 服务
 
         可以通过两种方式初始化：
-        1. 直接传入凭据 (url, uid, key)
+        1. 直接传入凭据 (url, key)
         2. 传入已创建的 DatastoresService 实例
 
         Args:
             url: API URL（可选）
-            uid: 用户 ID（可选）
             key: API 密钥（可选）
             datastores_service: 已创建的 DatastoresService 实例（可选）
         """
@@ -68,7 +66,6 @@ class SchemaService:
         else:
             self._service = DatastoresService(
                 url=url or "https://cds.climate.copernicus.eu/api",
-                uid=uid,
                 key=key,
             )
 

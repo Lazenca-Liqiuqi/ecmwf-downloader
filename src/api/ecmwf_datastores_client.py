@@ -29,7 +29,7 @@ class DatastoresService:
     2. 应用约束计算（根据已选值更新其他字段的可选值）
 
     使用方式：
-        service = DatastoresService(url, uid, key)
+        service = DatastoresService(url, key)
         schema = service.get_dataset_schema("reanalysis-era5-pressure-levels")
         constraints = service.apply_constraints("reanalysis-era5-pressure-levels", {"year": "2000"})
     """
@@ -37,18 +37,15 @@ class DatastoresService:
     def __init__(
         self,
         url: str = "https://cds.climate.copernicus.eu/api",
-        uid: Optional[str] = None,
         key: Optional[str] = None,
     ):
         """初始化 Datastores 服务
 
         Args:
             url: API 地址
-            uid: 用户 ID
-            key: API 密钥
+            key: API 密钥（UUID 格式）
         """
         self.url = url
-        self.uid = uid
         self.key = key
         self._client = None
 
@@ -70,19 +67,8 @@ class DatastoresService:
             from ecmwf.datastores import Client
 
             # 构建完整的 key 字符串
-            # ECMWF CDS API 支持两种格式：
-            # 1. 新格式：直接使用 key（UUID 格式）
-            # 2. 旧格式：uid:key
-            if self.key:
-                # 优先使用 key，如果有 uid 则组合成 uid:key 格式
-                if self.uid and self.uid not in ("", "1", "None"):
-                    full_key = f"{self.uid}:{self.key}"
-                else:
-                    # 只有 key，直接使用（新格式）
-                    full_key = self.key
-            else:
-                # 尝试从配置文件读取
-                full_key = None
+            # 直接使用 key（UUID 格式）；如果为 None，客户端会尝试从配置文件读取
+            full_key = self.key or None
 
             # 创建客户端，提供 url 避免 FileNotFoundError
             self._client = Client(
@@ -102,7 +88,7 @@ class DatastoresService:
                 "未找到 API 配置文件。请配置 ECMWF 凭据：\n"
                 "1. 创建 ~/.ecmwfdatastoresrc 文件，内容格式：\n"
                 "   url: https://cds.climate.copernicus.eu/api\n"
-                "   key: your-uid:your-api-key\n"
+                "   key: your-api-key\n"
                 "2. 或设置环境变量 ECMWF_DATASTORES_URL 和 ECMWF_DATASTORES_KEY"
             )
         except Exception as e:

@@ -67,8 +67,8 @@ class AccountPool:
             if not data or "accounts" not in data:
                 raise AccountPoolError(f"配置文件格式错误: {config_file}")
 
-            # 解析账号列表
-            accounts_data = data["accounts"]
+            # 解析账号列表（处理 None 情况）
+            accounts_data = data["accounts"] or []
             self.accounts = [AccountInfo(**acc) for acc in accounts_data]
 
             # 重置索引

@@ -5,7 +5,7 @@ ECMWF Downloader TUI 请求预览对话框模块
 """
 
 import json
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from textual.containers import Container, Horizontal, VerticalScroll
 from textual.widgets import Button, Label, Static
@@ -91,6 +91,7 @@ class RequestPreviewDialog(BaseDialog):
         self,
         preview_items: List[Dict[str, Any]],
         split_strategy: str = "month",
+        callback: Optional[Callable[[], None]] = None,
         **kwargs: Any,
     ) -> None:
         """初始化对话框。
@@ -98,11 +99,13 @@ class RequestPreviewDialog(BaseDialog):
         Args:
             preview_items: TaskService.preview_tasks() 返回的预览列表。
             split_strategy: 拆分策略名称（month/year/none）。
+            callback: 确认回调函数，无参数无返回值。
             **kwargs: 传递给父类的参数。
         """
         super().__init__(title="请求预览", **kwargs)
         self._preview_items: List[Dict[str, Any]] = preview_items
         self._split_strategy: str = split_strategy
+        self._callback = callback
 
     def compose(self) -> Iterable:
         """构建对话框 UI。"""
@@ -158,14 +161,25 @@ class RequestPreviewDialog(BaseDialog):
 
     def _handle_confirm(self) -> None:
         """处理确认操作。"""
-        self.dismiss({"confirmed": True})
+        if self._callback:
+            try:
+                self._callback()
+            except Exception:
+                # 回调异常时记录日志，但仍关闭对话框
+                # 上层应有自己的错误处理和用户提示
+                self.log.exception("预览对话框回调执行失败")
+        self.dismiss()
 
     def _handle_cancel(self) -> None:
         """处理取消操作。"""
-        self.dismiss(None)
+        self.dismiss()
 
     def get_form_data(self) -> Optional[Dict[str, Any]]:
-        """收集表单数据。"""
+        """收集表单数据。
+
+        注意：此方法仅为基类抽象契约兼容而保留。
+        实际确认逻辑已通过 callback 参数实现，主流程不再依赖此返回值。
+        """
         return {"confirmed": True}
 
     @staticmethod

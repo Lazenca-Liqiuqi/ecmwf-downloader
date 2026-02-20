@@ -670,12 +670,10 @@ class DynamicFieldWidget(Vertical):
         self._update_select_options()
 
         # 重置下拉框到占位项（显示 "select"），以允许重复选择同一项
+        # 注意：此代码块只在 _input_widget 存在时执行（见上方 return 逻辑）
         self._suppress_events = True
         try:
-            if self._input_widget is not None:
-                self._select_widget.value = self.QUICK_SELECT_PROMPT_VALUE
-            elif self._select_widget._allow_blank:
-                self._select_widget.value = Select.BLANK
+            self._select_widget.value = self.QUICK_SELECT_PROMPT_VALUE
         finally:
             self._suppress_events = False
 
@@ -944,9 +942,18 @@ class DynamicFieldWidget(Vertical):
                 self._input_widget.value = ""
             if self._select_widget:
                 if self._input_widget is not None:
+                    # 快速选择模式：恢复到提示选项
                     self._select_widget.value = self.QUICK_SELECT_PROMPT_VALUE
+                elif not self._field.required:
+                    # 非必填字段：可以清空
+                    self._select_widget.clear()
                 else:
-                    self._select_widget.value = Select.BLANK
+                    # 必填字段：选择第一个选项，并同步内部状态
+                    options = self._build_select_options()
+                    if options:
+                        fallback = str(options[0][1])
+                        self._select_widget.value = fallback
+                        self._field.set_selected([fallback])
             if self._switch_widget:
                 self._switch_widget.value = False
             if self._radio_set_widget:

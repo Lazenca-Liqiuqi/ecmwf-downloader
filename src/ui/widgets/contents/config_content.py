@@ -96,6 +96,10 @@ class ConfigContent(Widget):
         padding: 0 1;
     }
 
+    #actions-section Button {
+        width: 1fr;
+    }
+
     #split-strategy-set {
         height: auto;
     }
@@ -222,7 +226,7 @@ class ConfigContent(Widget):
                 yield Label("数据集 ID", classes="form-label")
                 with Horizontal(classes="dataset-input-row"):
                     yield Input(
-                        placeholder="输入数据集 ID（如 reanalysis-era5-pressure-levels）",
+                        placeholder="输入数据集 ID",
                         id="input-dataset",
                         value="",
                     )
@@ -261,7 +265,7 @@ class ConfigContent(Widget):
             with Horizontal(id="actions-section"):
                 yield Button("预览", id="btn-preview", variant="primary")
                 yield Button("创建任务", id="btn-create", variant="default")
-                yield Button("清空", id="btn-clear", variant="default")
+                yield Button("清空参数", id="btn-clear", variant="default")
                 yield Button("重置", id="btn-reset", variant="default")
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -525,13 +529,12 @@ class ConfigContent(Widget):
             split_strategy = self._get_split_strategy()
             preview_items = self._task_service.preview_tasks(config, split_strategy)
 
-            result = await self.app.push_screen(
-                RequestPreviewDialog(preview_items, split_strategy)
+            def do_create():
+                self._handle_create()
+
+            self.app.push_screen(
+                RequestPreviewDialog(preview_items, split_strategy, callback=do_create)
             )
-            if result and result.get("confirmed"):
-                task_ids = self._task_service.create_batch_tasks(config, split_strategy)
-                self.notify(f"已创建 {len(task_ids)} 个任务", severity="success")
-                self._handle_clear()
 
         except ValueError as e:
             # 转义方括号避免 Textual markup 解析错误

@@ -134,7 +134,9 @@ class DownloadConfig(BaseModel):
     @classmethod
     def validate_years(cls, v: List[int]) -> List[int]:
         """验证年份范围"""
-        current_year = 2024  # TODO: 从datetime获取
+        from datetime import datetime
+
+        current_year = datetime.now().year
         for year in v:
             if year < 1940 or year > current_year:
                 raise ValueError(f"年份必须在1940-{current_year}之间: {year}")

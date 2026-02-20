@@ -2,6 +2,11 @@
 ECMWF Downloader TUI 配置管理屏幕模块
 
 提供下载参数配置表单，支持创建新的下载任务。
+
+⚠️ 已弃用：此屏幕已不再使用。
+实际实现已迁移至 src/ui/widgets/contents/config_content.py，
+由 src/ui/app.py 直接加载 ConfigContent 组件。
+此文件保留仅为兼容性考虑，未来版本将移除。
 """
 
 from typing import Iterable
@@ -16,6 +21,8 @@ from src.ui.screens.base_screen import BaseScreen
 
 class ConfigScreen(BaseScreen):
     """配置管理屏幕
+
+    ⚠️ 已弃用：请使用 ConfigContent 组件替代。
 
     功能：
     - 显示下载参数配置表单

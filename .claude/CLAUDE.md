@@ -40,17 +40,19 @@ ECMWF downloader/
 
 ## 当前状态
 
-**版本**：v0.2.3
+**版本**：v0.3.0
 
 **阶段**：第五阶段（下载功能集成）**进行中**
 
 **已完成的模块**：
-- ✅ 核心模块（exceptions, config, account_pool, progress）
+- ✅ 核心模块（exceptions, config, account_pool, progress, progress_store）
 - ✅ API层（base, cds_client, ecmwf_datastores_client）
 - ✅ 请求构建与任务服务（request_builder, task_service）
 - ✅ AI参数生成（ai_config, ai_generator, dataset_schema）
 - ✅ TUI界面（screens, dialogs, widgets, pages）
 - ✅ 配置初始化（config_initializer）
+- ✅ 任务状态扩展（QUEUED 状态）
+- ✅ 存储层抽象（TaskStore 接口）
 
 ## 工作阶段
 
@@ -65,10 +67,13 @@ ECMWF downloader/
   - [x] AI参数生成功能
   - [x] 账号系统重构（uid→email）
   - [x] 配置系统重构（example模板）
+  - [x] 任务持久化与观察者重构
+  - [x] 任务状态扩展（QUEUED）
+  - [x] 存储层抽象（TaskStore）
+  - [ ] 多文件存储集成
+  - [ ] 队列调度器
   - [ ] 集成下载Worker与控制按钮
   - [ ] 实现批量下载功能
-  - [ ] 添加下载进度实时更新
-  - [ ] 实现断点续传功能
 
 ## 资源
 

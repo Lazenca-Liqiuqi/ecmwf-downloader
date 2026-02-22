@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.3.0 2026.02.22 任务状态扩展与存储层重构
+
+### 新增功能
+
+1. **新增**：QUEUED 任务状态
+   - TaskStatus 枚举新增 `QUEUED = "queued"` 状态
+   - 表示任务已入队等待调度
+   - 状态流转：PENDING → QUEUED → DOWNLOADING → COMPLETED/FAILED/CANCELLED
+
+2. **新增**：任务存储层抽象
+   - 新建 `src/core/progress_store.py` 模块
+   - `TaskStore` 抽象基类定义统一存储接口
+   - `SingleFileTaskStore` 单文件 JSON 存储实现
+   - `MultiFileTaskStore` 多文件存储实现
+
+### 重构
+
+1. **重构**：任务持久化机制
+   - TaskService 创建任务后立即持久化
+   - save() 失败时回滚内存状态（事务一致性）
+   - 批量创建保证原子性
+
+2. **重构**：观察者通知机制
+   - 新增 `TaskEventType` 枚举（CREATED/UPDATED/DELETED）
+   - 锁外通知观察者，解决多线程死锁问题
+   - UI 根据事件类型处理，避免反查 ProgressManager
+
+3. **重构**：项目记忆系统
+   - CLAUDE.md 重构为标准格式
+   - README.md 重构为标准格式
+   - 新增 `src/CLAUDE.md` 子目录记忆
+
+### 多文件存储设计
+
+```
+data/
+├── pending_tasks.json     # PENDING 状态
+├── queued_tasks.json      # QUEUED 状态
+├── downloading_tasks.json # DOWNLOADING, RETRYING 状态
+└── finished_tasks.json    # COMPLETED, FAILED, CANCELLED 状态
+```
+
+### UI 更新
+
+- 所有状态映射统一添加 QUEUED（颜色：cyan，文本："已入队"）
+- 筛选映射添加 queued 选项
+
+---
+
 ## 0.2.3 2026.02.20 账号系统重构与配置系统优化
 
 ### 重构

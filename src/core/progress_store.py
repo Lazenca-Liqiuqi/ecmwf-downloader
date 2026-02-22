@@ -10,10 +10,10 @@ import tempfile
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional
 
 from src.core.exceptions import ProgressLoadError, ProgressSaveError
-from src.core.progress import TaskInfo, TaskStatus
+from src.core.models import TaskInfo, TaskStatus
 
 
 class TaskStore(ABC):
@@ -59,6 +59,7 @@ class TaskStore(ABC):
 
         Raises:
             ProgressSaveError: 保存失败时抛出
+            ProgressLoadError: 读取现有数据失败时抛出（单文件实现需要先加载）
         """
         pass
 
@@ -71,6 +72,7 @@ class TaskStore(ABC):
 
         Raises:
             ProgressSaveError: 保存失败时抛出
+            ProgressLoadError: 读取现有数据失败时抛出（单文件实现需要先加载）
         """
         pass
 
@@ -444,7 +446,14 @@ class MultiFileTaskStore(TaskStore):
                 self._save_file(file_path, file_tasks)
             elif file_path.exists():
                 # 如果该状态没有任务，删除空文件
-                file_path.unlink()
+                try:
+                    file_path.unlink()
+                except OSError as e:
+                    raise ProgressSaveError(
+                        f"删除空任务文件失败: {e}",
+                        file_path=str(file_path),
+                        original_error=e,
+                    )
 
     def save_task(self, task_id: str, task: TaskInfo) -> None:
         """保存单个任务
@@ -470,7 +479,14 @@ class MultiFileTaskStore(TaskStore):
                 if old_tasks:
                     self._save_file(old_file, old_tasks)
                 elif old_file.exists():
-                    old_file.unlink()
+                    try:
+                        old_file.unlink()
+                    except OSError as e:
+                        raise ProgressSaveError(
+                            f"删除旧任务文件失败: {e}",
+                            file_path=str(old_file),
+                            original_error=e,
+                        )
 
         # 添加到新文件
         new_tasks = self._load_file(new_file)
@@ -496,7 +512,14 @@ class MultiFileTaskStore(TaskStore):
             if tasks:
                 self._save_file(file_path, tasks)
             elif file_path.exists():
-                file_path.unlink()
+                try:
+                    file_path.unlink()
+                except OSError as e:
+                    raise ProgressSaveError(
+                        f"删除任务文件失败: {e}",
+                        file_path=str(file_path),
+                        original_error=e,
+                    )
 
     def load_tasks_by_status(self, status: TaskStatus) -> Dict[str, TaskInfo]:
         """按状态加载任务
@@ -536,3 +559,75 @@ class MultiFileTaskStore(TaskStore):
             "data_dir": str(self.data_dir),
             "files": ",".join(FILE_STATUS_MAP.keys()),
         }
+
+    def needs_migration(self, single_file_path: Path) -> bool:
+        """检查是否需要从单文件迁移
+
+        Args:
+            single_file_path: 单文件存储路径
+
+        Returns:
+            bool: 是否需要迁移（旧文件存在且新文件不存在）
+        """
+        # 如果旧文件不存在，不需要迁移
+        if not single_file_path.exists():
+            return False
+
+        # 如果新文件已存在，不迁移（避免覆盖）
+        for filename in FILE_STATUS_MAP.keys():
+            if (self.data_dir / filename).exists():
+                return False
+
+        return True
+
+    def migrate_from_single_file(
+        self,
+        single_file_path: Path,
+        remove_source: bool = False,
+    ) -> int:
+        """从单文件存储迁移到多文件存储
+
+        Args:
+            single_file_path: 单文件存储路径
+            remove_source: 是否删除源文件（默认保留）
+
+        Returns:
+            int: 迁移的任务数量
+
+        Raises:
+            ProgressLoadError: 加载失败时抛出
+            ProgressSaveError: 保存失败时抛出
+        """
+        if not single_file_path.exists():
+            return 0
+
+        # 检查新文件是否已存在
+        for filename in FILE_STATUS_MAP.keys():
+            if (self.data_dir / filename).exists():
+                raise ProgressSaveError(
+                    "目标文件已存在，无法迁移",
+                    file_path=str(self.data_dir / filename),
+                )
+
+        # 使用 SingleFileTaskStore 加载旧数据
+        old_store = SingleFileTaskStore(single_file_path)
+        tasks = old_store.load()
+
+        if not tasks:
+            return 0
+
+        # 保存到新存储
+        self.save(tasks)
+
+        # 删除源文件（可选）
+        if remove_source:
+            try:
+                single_file_path.unlink()
+            except OSError as e:
+                raise ProgressSaveError(
+                    f"删除源文件失败: {e}",
+                    file_path=str(single_file_path),
+                    original_error=e,
+                )
+
+        return len(tasks)

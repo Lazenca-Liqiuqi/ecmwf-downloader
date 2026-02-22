@@ -22,7 +22,9 @@ from src.core.exceptions import (
     ProgressSaveError,
     TaskValidationError,
 )
-from src.core.progress import ProgressManager, TaskInfo, TaskStatus
+from src.core.models import TaskEventType, TaskInfo, TaskStatus
+from src.core.progress import ProgressManager
+from src.core.progress_store import MultiFileTaskStore, SingleFileTaskStore, TaskStore
 from src.core.request_builder import DownloadRequest, RequestBuilder
 from src.core.task_service import TaskService
 
@@ -46,10 +48,16 @@ __all__ = [
     "ProgressSaveError",
     "ConfigurationError",
     "TaskValidationError",
-    # 进度管理
-    "ProgressManager",
+    # 数据模型
     "TaskInfo",
     "TaskStatus",
+    "TaskEventType",
+    # 进度管理
+    "ProgressManager",
+    # 存储层
+    "TaskStore",
+    "SingleFileTaskStore",
+    "MultiFileTaskStore",
     # 请求构建
     "DownloadRequest",
     "RequestBuilder",

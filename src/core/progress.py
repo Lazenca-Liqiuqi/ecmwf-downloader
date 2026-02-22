@@ -4,93 +4,35 @@ ECMWF下载器进度管理模块
 实现线程安全的任务进度管理，支持持久化和观察者模式。
 """
 
-import json
-import os
+import copy
 import threading
-import tempfile
-from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from src.core.exceptions import ProgressLoadError, ProgressSaveError
+from src.core.models import TaskEventType, TaskInfo, TaskStatus
+from src.core.progress_store import SingleFileTaskStore, TaskStore
+
+if TYPE_CHECKING:
+    pass
 
 
-class TaskStatus(str, Enum):
-    """任务状态枚举
+def _deep_copy_task(task: TaskInfo) -> TaskInfo:
+    """深拷贝任务信息
 
-    状态流转：
-    PENDING → QUEUED → DOWNLOADING → COMPLETED/FAILED/CANCELLED
-                      ↘ RETRYING ↗
+    创建 TaskInfo 的完全独立副本，包括 metadata 等可变字段。
+
+    Args:
+        task: 原始任务信息
+
+    Returns:
+        TaskInfo: 深拷贝后的任务信息
     """
-
-    PENDING = "pending"  # 待下载（初始状态）
-    QUEUED = "queued"  # 已入队（等待调度）
-    DOWNLOADING = "downloading"  # 下载中
-    COMPLETED = "completed"  # 已完成
-    FAILED = "failed"  # 失败
-    CANCELLED = "cancelled"  # 已取消
-    RETRYING = "retrying"  # 重试中
-
-
-class TaskEventType(str, Enum):
-    """任务事件类型枚举
-
-    用于观察者模式中区分不同的事件类型。
-    """
-
-    CREATED = "created"  # 任务创建
-    UPDATED = "updated"  # 任务更新（状态、进度等）
-    DELETED = "deleted"  # 任务删除
-
-
-@dataclass
-class TaskInfo:
-    """任务信息数据类
-
-    记录单个下载任务的所有信息。
-    """
-
-    task_id: str  # 任务唯一标识
-    filename: str  # 目标文件名
-    status: TaskStatus  # 当前状态
-    progress: float = 0.0  # 下载进度（0-100）
-    error_message: Optional[str] = None  # 错误信息
-    retry_count: int = 0  # 重试次数
-    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
-    started_at: Optional[str] = None  # 开始时间
-    completed_at: Optional[str] = None  # 完成时间
-    file_size: Optional[int] = None  # 文件大小（字节）
-    downloaded_size: int = 0  # 已下载大小（字节）
-    account_id: Optional[str] = None  # 使用的账号ID
-    metadata: Dict[str, Any] = field(default_factory=dict)  # 额外元数据
-
-    def to_dict(self) -> dict:
-        """转换为字典格式"""
-        return {
-            "task_id": self.task_id,
-            "filename": self.filename,
-            "status": self.status.value,
-            "progress": self.progress,
-            "error_message": self.error_message,
-            "retry_count": self.retry_count,
-            "created_at": self.created_at,
-            "started_at": self.started_at,
-            "completed_at": self.completed_at,
-            "file_size": self.file_size,
-            "downloaded_size": self.downloaded_size,
-            "account_id": self.account_id,
-            "metadata": self.metadata,
-        }
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "TaskInfo":
-        """从字典创建实例"""
-        # 处理状态枚举
-        if isinstance(data.get("status"), str):
-            data["status"] = TaskStatus(data["status"])
-        return cls(**data)
+    # 创建新实例并深拷贝可变字段
+    task_dict = task.__dict__.copy()
+    task_dict["metadata"] = copy.deepcopy(task.metadata)
+    return TaskInfo(**task_dict)
 
 
 class ProgressManager:
@@ -98,15 +40,33 @@ class ProgressManager:
 
     管理所有下载任务的进度和状态，提供线程安全的操作接口。
     支持持久化到JSON文件和观察者模式。
+
+    存储策略：
+    - 可通过 progress_file 参数使用单文件存储（向后兼容）
+    - 可通过 store 参数使用自定义存储实现（如 MultiFileTaskStore）
     """
 
-    def __init__(self, progress_file: Optional[Path] = None):
+    def __init__(
+        self,
+        progress_file: Optional[Path] = None,
+        store: Optional[TaskStore] = None,
+    ):
         """初始化进度管理器
 
         Args:
-            progress_file: 进度文件路径，如果为None则不启用持久化
+            progress_file: 进度文件路径（单文件存储模式，向后兼容）
+            store: 自定义存储实现（优先级高于 progress_file）
+
+        Note:
+            如果同时提供 store 和 progress_file，优先使用 store。
+            如果只提供 progress_file，会自动创建 SingleFileTaskStore。
         """
-        self.progress_file = progress_file
+        self._store: Optional[TaskStore] = store
+
+        # 向后兼容：如果只提供了 progress_file，创建单文件存储
+        if self._store is None and progress_file is not None:
+            self._store = SingleFileTaskStore(progress_file)
+
         self.tasks: Dict[str, TaskInfo] = {}
 
         # 线程安全锁（使用RLock支持同线程重入）
@@ -116,91 +76,74 @@ class ProgressManager:
         # 回调签名：(task_id: str, task_info: TaskInfo, event_type: TaskEventType) -> None
         self._observers: List[Callable[[str, TaskInfo, "TaskEventType"], None]] = []
 
-        # 如果提供了进度文件，则加载
-        if progress_file is not None and progress_file.exists():
+        # 如果有存储，则加载
+        if self._store is not None:
             self.load()
 
+    @property
+    def progress_file(self) -> Optional[Path]:
+        """获取进度文件路径（向后兼容属性）
+
+        Returns:
+            Optional[Path]: 单文件存储路径，多文件存储返回 None
+        """
+        if isinstance(self._store, SingleFileTaskStore):
+            return self._store.progress_file
+        return None
+
+    @property
+    def store(self) -> Optional[TaskStore]:
+        """获取存储实例
+
+        Returns:
+            Optional[TaskStore]: 存储实现
+        """
+        return self._store
+
     def load(self) -> None:
-        """从文件加载进度
+        """从存储加载进度
 
         Raises:
             ProgressLoadError: 文件读取失败或格式错误
         """
-        if self.progress_file is None:
+        if self._store is None:
             return
 
-        try:
-            with self._lock:
-                with open(self.progress_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-
-                # 解析任务列表
-                tasks_data = data.get("tasks", [])
-                self.tasks = {
-                    task_data["task_id"]: TaskInfo.from_dict(task_data)
-                    for task_data in tasks_data
-                }
-
-        except FileNotFoundError:
-            # 文件不存在是正常情况，首次运行时创建
-            self.tasks = {}
-        except json.JSONDecodeError as e:
-            raise ProgressLoadError(
-                f"进度文件JSON格式错误: {e}",
-                file_path=str(self.progress_file),
-                original_error=e,
-            )
-        except Exception as e:
-            raise ProgressLoadError(
-                f"加载进度文件失败: {e}",
-                file_path=str(self.progress_file),
-                original_error=e,
-            )
+        with self._lock:
+            self.tasks = self._store.load()
 
     def save(self) -> None:
-        """保存进度到文件
+        """保存进度到存储
 
         Raises:
             ProgressSaveError: 文件保存失败
         """
-        if self.progress_file is None:
+        if self._store is None:
             return
 
-        try:
-            with self._lock:
-                # 转换为字典格式
-                data = {
-                    "tasks": [task.to_dict() for task in self.tasks.values()],
-                    "updated_at": datetime.now().isoformat(),
-                }
+        with self._lock:
+            self._store.save(self.tasks)
 
-                self.progress_file.parent.mkdir(parents=True, exist_ok=True)
+    def save_task(self, task_id: str) -> None:
+        """保存单个任务到存储
 
-                # 原子写入：先写入同目录临时文件，再用 os.replace 原子替换目标文件
-                tmp_fd, tmp_path = tempfile.mkstemp(
-                    prefix=f"{self.progress_file.name}.",
-                    suffix=".tmp",
-                    dir=str(self.progress_file.parent),
-                )
-                try:
-                    with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
-                        json.dump(data, f, indent=2, ensure_ascii=False)
-                        f.write("\n")
-                        f.flush()
-                        os.fsync(f.fileno())
-                    os.replace(tmp_path, self.progress_file)
-                finally:
-                    try:
-                        os.unlink(tmp_path)
-                    except FileNotFoundError:
-                        pass
+        对于多文件存储，此方法比 save() 更高效。
+        对于单文件存储，此方法会重写整个文件。
 
-        except Exception as e:
-            raise ProgressSaveError(
-                f"保存进度文件失败: {e}",
-                file_path=str(self.progress_file),
-                original_error=e,
-            )
+        Args:
+            task_id: 任务ID
+
+        Raises:
+            ProgressSaveError: 文件保存失败
+            KeyError: 任务不存在
+        """
+        if self._store is None:
+            return
+
+        with self._lock:
+            if task_id not in self.tasks:
+                raise KeyError(f"任务不存在: {task_id}")
+            self._store.save_task(task_id, self.tasks[task_id])
 
     def create_task(
         self,
@@ -226,8 +169,8 @@ class ProgressManager:
                 metadata=metadata or {},
             )
             self.tasks[task_id] = task
-            # 构造快照用于锁外通知
-            task_snapshot = TaskInfo(**task.__dict__)
+            # 构造快照用于锁外通知（深拷贝避免外部修改）
+            task_snapshot = _deep_copy_task(task)
 
         # 锁外通知观察者（避免死锁）
         self._notify_observers(task_id, task_snapshot, TaskEventType.CREATED)
@@ -265,8 +208,8 @@ class ProgressManager:
             if error_message is not None:
                 task.error_message = error_message
 
-            # 构造快照用于锁外通知
-            task_snapshot = TaskInfo(**task.__dict__)
+            # 构造快照用于锁外通知（深拷贝避免外部修改）
+            task_snapshot = _deep_copy_task(task)
 
         # 锁外通知观察者（避免死锁）
         if task_snapshot is not None:
@@ -295,8 +238,8 @@ class ProgressManager:
             if downloaded_size is not None:
                 task.downloaded_size = downloaded_size
 
-            # 构造快照用于锁外通知
-            task_snapshot = TaskInfo(**task.__dict__)
+            # 构造快照用于锁外通知（深拷贝避免外部修改）
+            task_snapshot = _deep_copy_task(task)
 
         # 锁外通知观察者（避免死锁）
         if task_snapshot is not None:
@@ -322,8 +265,8 @@ class ProgressManager:
             task.status = TaskStatus.RETRYING
             retry_count = task.retry_count
 
-            # 构造快照用于锁外通知
-            task_snapshot = TaskInfo(**task.__dict__)
+            # 构造快照用于锁外通知（深拷贝避免外部修改）
+            task_snapshot = _deep_copy_task(task)
 
         # 锁外通知观察者（避免死锁）
         if task_snapshot is not None:
@@ -344,42 +287,42 @@ class ProgressManager:
                 task.account_id = account_id
 
     def get_task(self, task_id: str) -> Optional[TaskInfo]:
-        """获取任务信息（副本）
+        """获取任务信息（深拷贝副本）
 
         Args:
             task_id: 任务ID
 
         Returns:
-            Optional[TaskInfo]: 任务信息的副本，如果不存在则返回None
+            Optional[TaskInfo]: 任务信息的深拷贝副本，如果不存在则返回None
         """
         with self._lock:
             task = self.tasks.get(task_id)
             if task is None:
                 return None
-            # 返回副本避免外部修改
-            return TaskInfo(**task.__dict__)
+            # 返回深拷贝副本避免外部修改
+            return _deep_copy_task(task)
 
     def get_all_tasks(self) -> List[TaskInfo]:
-        """获取所有任务（副本列表）
+        """获取所有任务（深拷贝副本列表）
 
         Returns:
-            List[TaskInfo]: 所有任务的副本列表
+            List[TaskInfo]: 所有任务的深拷贝副本列表
         """
         with self._lock:
-            return [TaskInfo(**task.__dict__) for task in self.tasks.values()]
+            return [_deep_copy_task(task) for task in self.tasks.values()]
 
     def get_tasks_by_status(self, status: TaskStatus) -> List[TaskInfo]:
-        """根据状态筛选任务
+        """根据状态筛选任务（深拷贝副本）
 
         Args:
             status: 任务状态
 
         Returns:
-            List[TaskInfo]: 符合条件的任务列表
+            List[TaskInfo]: 符合条件的深拷贝任务列表
         """
         with self._lock:
             return [
-                TaskInfo(**task.__dict__)
+                _deep_copy_task(task)
                 for task in self.tasks.values()
                 if task.status == status
             ]
@@ -398,8 +341,8 @@ class ProgressManager:
             if task_id not in self.tasks:
                 return False
 
-            # 保存任务信息副本（用于锁外通知观察者）
-            task_snapshot = TaskInfo(**self.tasks[task_id].__dict__)
+            # 保存任务信息深拷贝副本（用于锁外通知观察者）
+            task_snapshot = _deep_copy_task(self.tasks[task_id])
             del self.tasks[task_id]
 
         # 锁外通知观察者（避免死锁）
@@ -518,13 +461,13 @@ class ProgressManager:
         """获取所有待处理的任务（PENDING和RETRYING）
 
         Returns:
-            List[TaskInfo]: 待处理任务列表
+            List[TaskInfo]: 待处理任务的深拷贝列表
         """
         with self._lock:
             return [
-                TaskInfo(**task.__dict__)
+                _deep_copy_task(task)
                 for task in self.tasks.values()
-                if task.status in (TaskStatus.PENDING, TaskStatus.RETRYING)
+                if task.status in (TaskStatus.PENDING, TaskStatus.RETRYING, TaskStatus.QUEUED)
             ]
 
     def get_active_tasks(self) -> List[TaskInfo]:

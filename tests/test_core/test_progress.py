@@ -15,6 +15,7 @@ from datetime import datetime
 import pytest
 
 from src.core.progress import TaskStatus, TaskInfo, ProgressManager
+from src.core.models import TaskEventType
 from src.core.exceptions import ProgressLoadError, ProgressSaveError
 
 
@@ -209,8 +210,8 @@ class TestProgressManagerCreateTask:
 
         notified = []
 
-        def observer(task_id, task_info):
-            notified.append((task_id, task_info.status))
+        def observer(task_id, task_info, event_type):
+            notified.append((task_id, task_info.status, event_type))
 
         manager.register_observer(observer)
 
@@ -219,6 +220,7 @@ class TestProgressManagerCreateTask:
         assert len(notified) == 1
         assert notified[0][0] == "task_new"
         assert notified[0][1] == TaskStatus.PENDING
+        assert notified[0][2] == TaskEventType.CREATED
 
 
 class TestProgressManagerUpdateStatus:
@@ -582,8 +584,8 @@ class TestProgressManagerObservers:
 
         notified = []
 
-        def observer(task_id, task_info):
-            notified.append((task_id, task_info.status))
+        def observer(task_id, task_info, event_type):
+            notified.append((task_id, task_info.status, event_type))
 
         manager.register_observer(observer)
 
@@ -599,7 +601,7 @@ class TestProgressManagerObservers:
 
         notified = []
 
-        def observer(task_id, task_info):
+        def observer(task_id, task_info, event_type):
             notified.append(task_id)
 
         manager.register_observer(observer)

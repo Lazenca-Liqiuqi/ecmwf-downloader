@@ -185,6 +185,7 @@ class TasksContent(Widget):
         else:
             status_map = {
                 "pending": TaskStatus.PENDING,
+                "queued": TaskStatus.QUEUED,
                 "downloading": TaskStatus.DOWNLOADING,
                 "completed": TaskStatus.COMPLETED,
                 "failed": TaskStatus.FAILED,

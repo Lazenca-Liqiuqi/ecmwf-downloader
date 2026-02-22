@@ -18,9 +18,15 @@ from src.core.exceptions import ProgressLoadError, ProgressSaveError
 
 
 class TaskStatus(str, Enum):
-    """任务状态枚举"""
+    """任务状态枚举
 
-    PENDING = "pending"  # 待下载
+    状态流转：
+    PENDING → QUEUED → DOWNLOADING → COMPLETED/FAILED/CANCELLED
+                      ↘ RETRYING ↗
+    """
+
+    PENDING = "pending"  # 待下载（初始状态）
+    QUEUED = "queued"  # 已入队（等待调度）
     DOWNLOADING = "downloading"  # 下载中
     COMPLETED = "completed"  # 已完成
     FAILED = "failed"  # 失败
@@ -435,6 +441,7 @@ class ProgressManager:
                 return {
                     "total_tasks": 0,
                     "pending": 0,
+                    "queued": 0,
                     "downloading": 0,
                     "completed": 0,
                     "failed": 0,
@@ -453,6 +460,7 @@ class ProgressManager:
             return {
                 "total_tasks": total,
                 "pending": status_counts[TaskStatus.PENDING],
+                "queued": status_counts[TaskStatus.QUEUED],
                 "downloading": status_counts[TaskStatus.DOWNLOADING],
                 "completed": status_counts[TaskStatus.COMPLETED],
                 "failed": status_counts[TaskStatus.FAILED],

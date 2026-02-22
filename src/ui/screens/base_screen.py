@@ -180,6 +180,7 @@ class BaseScreen(Screen):
 
         color_map = {
             TaskStatus.PENDING: "grey",
+            TaskStatus.QUEUED: "cyan",
             TaskStatus.DOWNLOADING: "blue",
             TaskStatus.COMPLETED: "green",
             TaskStatus.FAILED: "red",
@@ -201,6 +202,7 @@ class BaseScreen(Screen):
 
         text_map = {
             TaskStatus.PENDING: "待下载",
+            TaskStatus.QUEUED: "已入队",
             TaskStatus.DOWNLOADING: "下载中",
             TaskStatus.COMPLETED: "已完成",
             TaskStatus.FAILED: "失败",

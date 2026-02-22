@@ -154,6 +154,7 @@ class TaskTable(DataTable):
         """
         status_map = {
             TaskStatus.PENDING: "待下载",
+            TaskStatus.QUEUED: "已入队",
             TaskStatus.DOWNLOADING: "下载中",
             TaskStatus.COMPLETED: "已完成",
             TaskStatus.FAILED: "失败",

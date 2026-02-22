@@ -8,6 +8,7 @@ import uuid
 from typing import Any, Dict, List, Literal, Optional
 
 from src.core.config import DownloadConfig
+from src.core.exceptions import ProgressSaveError
 from src.core.progress import ProgressManager
 from src.core.request_builder import DownloadRequest, RequestBuilder
 
@@ -48,6 +49,7 @@ class TaskService:
 
         Raises:
             ValueError: 请求参数校验失败时抛出。
+            ProgressSaveError: 任务持久化失败时抛出（内存状态已回滚）。
         """
         request = self.request_builder.build_request(config)
         self._validate_request_or_raise(request)
@@ -62,6 +64,14 @@ class TaskService:
             filename=request.filename,
             metadata=task_metadata,
         )
+
+        try:
+            self.progress_manager.save()
+        except ProgressSaveError:
+            # 持久化失败，回滚内存中的任务
+            self.progress_manager.delete_task(task_id)
+            raise
+
         return task_id
 
     def create_batch_tasks(
@@ -82,23 +92,32 @@ class TaskService:
 
         Raises:
             ValueError: 请求参数校验失败时抛出。
+            ProgressSaveError: 任务持久化失败时抛出（内存状态已回滚）。
         """
         requests = self.request_builder.build_batch_requests(config, split_strategy)
         task_ids: List[str] = []
 
-        for request in requests:
-            self._validate_request_or_raise(request)
-            task_id = self._generate_task_id()
-            task_metadata = self._build_task_metadata(
-                request=request,
-                extra_metadata=metadata,
-            )
-            self.progress_manager.create_task(
-                task_id=task_id,
-                filename=request.filename,
-                metadata=task_metadata,
-            )
-            task_ids.append(task_id)
+        try:
+            for request in requests:
+                self._validate_request_or_raise(request)
+                task_id = self._generate_task_id()
+                task_metadata = self._build_task_metadata(
+                    request=request,
+                    extra_metadata=metadata,
+                )
+                self.progress_manager.create_task(
+                    task_id=task_id,
+                    filename=request.filename,
+                    metadata=task_metadata,
+                )
+                task_ids.append(task_id)
+
+            self.progress_manager.save()
+        except Exception:
+            # 任何异常（校验失败或持久化失败）都回滚已创建的任务
+            for task_id in task_ids:
+                self.progress_manager.delete_task(task_id)
+            raise
 
         return task_ids
 

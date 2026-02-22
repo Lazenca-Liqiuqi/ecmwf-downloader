@@ -381,9 +381,15 @@ class DownloadContent(Widget):
             self.log.info("[DownloadContent] 进度观察者已注销")
 
     def _progress_observer_callback(
-        self, task_id: str, task_info: "TaskInfo"
+        self, task_id: str, task_info: "TaskInfo", event_type: "TaskEventType"
     ) -> None:
-        """进度管理器观察者回调（可能在后台线程调用）"""
+        """进度管理器观察者回调（可能在后台线程调用）
+
+        Args:
+            task_id: 任务ID
+            task_info: 任务信息快照
+            event_type: 事件类型（CREATED/UPDATED/DELETED）
+        """
         # 组件卸载后或应用退出阶段，忽略后续更新，避免 call_from_thread 阻塞/异常
         if (not self._observer_registered) or (not self.is_mounted):
             return
@@ -394,19 +400,36 @@ class DownloadContent(Widget):
                 self._on_progress_update,
                 task_id,
                 task_info,
+                event_type,
             )
         except Exception:
             # 应用退出期间可能无法再调度回主线程，静默忽略即可
             return
 
-    def _on_progress_update(self, task_id: str, task_info: "TaskInfo") -> None:
+    def _on_progress_update(
+        self, task_id: str, task_info: "TaskInfo", event_type: "TaskEventType"
+    ) -> None:
         """进度更新时刷新界面
 
         Args:
             task_id: 任务ID
-            task_info: 任务信息
+            task_info: 任务信息快照
+            event_type: 事件类型（CREATED/UPDATED/DELETED）
         """
         if not self.is_mounted:
+            return
+
+        from src.core.progress import TaskEventType
+
+        # 处理删除事件
+        if event_type == TaskEventType.DELETED:
+            try:
+                table = self.query_one("#active-table", TaskTable)
+                table.remove_task(task_id)
+            except NoMatches:
+                pass
+            # 更新整体进度
+            self._update_overall_progress()
             return
 
         # 如果是活动任务（下载中或重试中），增量更新表格

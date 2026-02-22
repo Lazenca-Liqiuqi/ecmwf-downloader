@@ -242,13 +242,28 @@ class DownloadScreen(BaseScreen):
         self._load_active_tasks()
         self._update_overall_progress()
 
-    def _on_progress_update(self, task_id: str, task_info) -> None:
+    def _on_progress_update(
+        self, task_id: str, task_info: "TaskInfo", event_type: "TaskEventType"
+    ) -> None:
         """进度更新时刷新界面
 
         Args:
             task_id: 任务ID
-            task_info: 任务信息
+            task_info: 任务信息快照
+            event_type: 事件类型（CREATED/UPDATED/DELETED）
         """
+        from src.core.progress import TaskEventType
+
+        # 处理删除事件
+        if event_type == TaskEventType.DELETED:
+            try:
+                table = self.query_one("#active-table", TaskTable)
+                table.remove_task(task_id)
+            except Exception:
+                pass
+            self._update_overall_progress()
+            return
+
         # 如果是活动任务（下载中或重试中），增量更新表格
         if task_info.status in (TaskStatus.DOWNLOADING, TaskStatus.RETRYING):
             table = self.query_one("#active-table", TaskTable)

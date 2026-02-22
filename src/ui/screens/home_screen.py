@@ -149,7 +149,15 @@ class HomeScreen(BaseScreen):
                 status_text,
             )
 
-    def _on_progress_update(self, task_id: str, task_info) -> None:
-        """进度更新时刷新数据"""
+    def _on_progress_update(
+        self, task_id: str, task_info: "TaskInfo", event_type: "TaskEventType"
+    ) -> None:
+        """进度更新时刷新数据
+
+        Args:
+            task_id: 任务ID
+            task_info: 任务信息快照
+            event_type: 事件类型（CREATED/UPDATED/DELETED）
+        """
         # 刷新统计数据和最近任务
         self.refresh_data()

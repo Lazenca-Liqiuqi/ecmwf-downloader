@@ -328,15 +328,26 @@ class TasksScreen(BaseScreen):
             status_filter=self._current_filter, search_text=search_input.value
         )
 
-    def _on_progress_update(self, task_id: str, task_info) -> None:
+    def _on_progress_update(
+        self, task_id: str, task_info: "TaskInfo", event_type: "TaskEventType"
+    ) -> None:
         """进度更新时刷新任务列表
 
         使用增量更新提高性能，只更新变化的行。
 
         Args:
             task_id: 任务ID
-            task_info: 任务信息
+            task_info: 任务信息快照
+            event_type: 事件类型（CREATED/UPDATED/DELETED）
         """
+        from src.core.progress import TaskEventType
+
         table = self.query_one("#tasks-table", TaskTable)
+
+        # 处理删除事件
+        if event_type == TaskEventType.DELETED:
+            table.remove_task(task_id)
+            return
+
         # 使用 TaskTable 的增量更新方法
         table.update_row(task_info)

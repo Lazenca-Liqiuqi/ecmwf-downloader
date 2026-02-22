@@ -121,7 +121,7 @@ class BaseScreen(Screen):
             self.log.info(f"[{self.__class__.__name__}] 进度观察者已注销")
 
     def _progress_observer_callback(
-        self, task_id: str, task_info: "TaskInfo"
+        self, task_id: str, task_info: "TaskInfo", event_type: "TaskEventType"
     ) -> None:
         """进度管理器观察者回调（可能在后台线程调用）
 
@@ -132,17 +132,19 @@ class BaseScreen(Screen):
 
         Args:
             task_id: 任务ID
-            task_info: 任务信息
+            task_info: 任务信息快照
+            event_type: 事件类型（CREATED/UPDATED/DELETED）
         """
         # 使用 call_from_thread 确保在主线程中更新 UI
         self.app.call_from_thread(
             self._on_progress_update,
             task_id,
             task_info,
+            event_type,
         )
 
     def _on_progress_update(
-        self, task_id: str, task_info: "TaskInfo"
+        self, task_id: str, task_info: "TaskInfo", event_type: "TaskEventType"
     ) -> None:
         """进度更新处理（在主线程中调用）
 
@@ -151,7 +153,8 @@ class BaseScreen(Screen):
 
         Args:
             task_id: 任务ID
-            task_info: 任务信息
+            task_info: 任务信息快照
+            event_type: 事件类型（CREATED/UPDATED/DELETED）
         """
         # 默认实现：子类重写
         pass

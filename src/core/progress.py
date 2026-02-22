@@ -5,7 +5,9 @@ ECMWF下载器进度管理模块
 """
 
 import json
+import os
 import threading
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -24,6 +26,17 @@ class TaskStatus(str, Enum):
     FAILED = "failed"  # 失败
     CANCELLED = "cancelled"  # 已取消
     RETRYING = "retrying"  # 重试中
+
+
+class TaskEventType(str, Enum):
+    """任务事件类型枚举
+
+    用于观察者模式中区分不同的事件类型。
+    """
+
+    CREATED = "created"  # 任务创建
+    UPDATED = "updated"  # 任务更新（状态、进度等）
+    DELETED = "deleted"  # 任务删除
 
 
 @dataclass
@@ -94,7 +107,8 @@ class ProgressManager:
         self._lock = threading.RLock()
 
         # 观察者列表（进度变化时调用的回调函数）
-        self._observers: List[Callable[[str, TaskInfo], None]] = []
+        # 回调签名：(task_id: str, task_info: TaskInfo, event_type: TaskEventType) -> None
+        self._observers: List[Callable[[str, TaskInfo, "TaskEventType"], None]] = []
 
         # 如果提供了进度文件，则加载
         if progress_file is not None and progress_file.exists():
@@ -154,9 +168,26 @@ class ProgressManager:
                     "updated_at": datetime.now().isoformat(),
                 }
 
-                # 写入文件
-                with open(self.progress_file, "w", encoding="utf-8") as f:
-                    json.dump(data, f, indent=2, ensure_ascii=False)
+                self.progress_file.parent.mkdir(parents=True, exist_ok=True)
+
+                # 原子写入：先写入同目录临时文件，再用 os.replace 原子替换目标文件
+                tmp_fd, tmp_path = tempfile.mkstemp(
+                    prefix=f"{self.progress_file.name}.",
+                    suffix=".tmp",
+                    dir=str(self.progress_file.parent),
+                )
+                try:
+                    with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
+                        json.dump(data, f, indent=2, ensure_ascii=False)
+                        f.write("\n")
+                        f.flush()
+                        os.fsync(f.fileno())
+                    os.replace(tmp_path, self.progress_file)
+                finally:
+                    try:
+                        os.unlink(tmp_path)
+                    except FileNotFoundError:
+                        pass
 
         except Exception as e:
             raise ProgressSaveError(
@@ -189,11 +220,13 @@ class ProgressManager:
                 metadata=metadata or {},
             )
             self.tasks[task_id] = task
+            # 构造快照用于锁外通知
+            task_snapshot = TaskInfo(**task.__dict__)
 
-            # 通知观察者
-            self._notify_observers(task_id, task)
+        # 锁外通知观察者（避免死锁）
+        self._notify_observers(task_id, task_snapshot, TaskEventType.CREATED)
 
-            return task
+        return task
 
     def update_status(
         self,
@@ -208,6 +241,7 @@ class ProgressManager:
             status: 新状态
             error_message: 错误信息（可选）
         """
+        task_snapshot = None
         with self._lock:
             task = self.tasks.get(task_id)
             if task is None:
@@ -225,8 +259,12 @@ class ProgressManager:
             if error_message is not None:
                 task.error_message = error_message
 
-            # 通知观察者
-            self._notify_observers(task_id, task)
+            # 构造快照用于锁外通知
+            task_snapshot = TaskInfo(**task.__dict__)
+
+        # 锁外通知观察者（避免死锁）
+        if task_snapshot is not None:
+            self._notify_observers(task_id, task_snapshot, TaskEventType.UPDATED)
 
     def update_progress(
         self,
@@ -241,6 +279,7 @@ class ProgressManager:
             progress: 进度百分比（0-100）
             downloaded_size: 已下载大小（可选）
         """
+        task_snapshot = None
         with self._lock:
             task = self.tasks.get(task_id)
             if task is None:
@@ -250,8 +289,12 @@ class ProgressManager:
             if downloaded_size is not None:
                 task.downloaded_size = downloaded_size
 
-            # 通知观察者
-            self._notify_observers(task_id, task)
+            # 构造快照用于锁外通知
+            task_snapshot = TaskInfo(**task.__dict__)
+
+        # 锁外通知观察者（避免死锁）
+        if task_snapshot is not None:
+            self._notify_observers(task_id, task_snapshot, TaskEventType.UPDATED)
 
     def increment_retry(self, task_id: str) -> int:
         """增加任务的重试计数
@@ -262,6 +305,8 @@ class ProgressManager:
         Returns:
             int: 更新后的重试次数
         """
+        task_snapshot = None
+        retry_count = 0
         with self._lock:
             task = self.tasks.get(task_id)
             if task is None:
@@ -269,11 +314,16 @@ class ProgressManager:
 
             task.retry_count += 1
             task.status = TaskStatus.RETRYING
+            retry_count = task.retry_count
 
-            # 通知观察者
-            self._notify_observers(task_id, task)
+            # 构造快照用于锁外通知
+            task_snapshot = TaskInfo(**task.__dict__)
 
-            return task.retry_count
+        # 锁外通知观察者（避免死锁）
+        if task_snapshot is not None:
+            self._notify_observers(task_id, task_snapshot, TaskEventType.UPDATED)
+
+        return retry_count
 
     def set_account(self, task_id: str, account_id: str) -> None:
         """设置任务使用的账号
@@ -337,11 +387,20 @@ class ProgressManager:
         Returns:
             bool: 是否成功删除
         """
+        task_snapshot = None
         with self._lock:
-            if task_id in self.tasks:
-                del self.tasks[task_id]
-                return True
-            return False
+            if task_id not in self.tasks:
+                return False
+
+            # 保存任务信息副本（用于锁外通知观察者）
+            task_snapshot = TaskInfo(**self.tasks[task_id].__dict__)
+            del self.tasks[task_id]
+
+        # 锁外通知观察者（避免死锁）
+        if task_snapshot is not None:
+            self._notify_observers(task_id, task_snapshot, TaskEventType.DELETED)
+
+        return True
 
     def clear_completed(self) -> int:
         """清除所有已完成的任务
@@ -402,18 +461,20 @@ class ProgressManager:
                 "overall_progress": total_progress / total,
             }
 
-    def register_observer(self, callback: Callable[[str, TaskInfo], None]) -> None:
+    def register_observer(
+        self, callback: Callable[[str, TaskInfo, "TaskEventType"], None]
+    ) -> None:
         """注册观察者
 
         当任务状态或进度变化时，会调用所有已注册的回调函数。
 
         Args:
-            callback: 回调函数，签名为 (task_id: str, task_info: TaskInfo) -> None
+            callback: 回调函数，签名为 (task_id: str, task_info: TaskInfo, event_type: TaskEventType) -> None
         """
         with self._lock:
             self._observers.append(callback)
 
-    def unregister_observer(self, callback: Callable[[str, TaskInfo], None]) -> None:
+    def unregister_observer(self, callback: Callable[[str, TaskInfo, "TaskEventType"], None]) -> None:
         """取消注册观察者
 
         Args:
@@ -423,18 +484,24 @@ class ProgressManager:
             if callback in self._observers:
                 self._observers.remove(callback)
 
-    def _notify_observers(self, task_id: str, task_info: TaskInfo) -> None:
+    def _notify_observers(
+        self, task_id: str, task_info: TaskInfo, event_type: TaskEventType
+    ) -> None:
         """通知所有观察者
 
         Args:
             task_id: 任务ID
-            task_info: 任务信息
+            task_info: 任务信息快照
+            event_type: 事件类型（CREATED/UPDATED/DELETED）
         """
+        # 复制观察者列表（避免在通知过程中被修改）
+        with self._lock:
+            observers_copy = list(self._observers)
+
         # 在锁外调用观察者，避免死锁
-        observers_copy = list(self._observers)
         for observer in observers_copy:
             try:
-                observer(task_id, task_info)
+                observer(task_id, task_info, event_type)
             except Exception:
                 # 观察者异常不应影响进度管理
                 pass

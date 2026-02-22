@@ -396,28 +396,45 @@ class TasksContent(Widget):
             self.log.info("[TasksContent] 进度观察者已注销")
 
     def _progress_observer_callback(
-        self, task_id: str, task_info: "TaskInfo"
+        self, task_id: str, task_info: "TaskInfo", event_type: "TaskEventType"
     ) -> None:
-        """进度管理器观察者回调（可能在后台线程调用）"""
+        """进度管理器观察者回调（可能在后台线程调用）
+
+        Args:
+            task_id: 任务ID
+            task_info: 任务信息快照
+            event_type: 事件类型（CREATED/UPDATED/DELETED）
+        """
         # 使用 call_from_thread 确保在主线程中更新 UI
         self._app_ref.call_from_thread(
             self._on_progress_update,
             task_id,
             task_info,
+            event_type,
         )
 
-    def _on_progress_update(self, task_id: str, task_info: "TaskInfo") -> None:
+    def _on_progress_update(
+        self, task_id: str, task_info: "TaskInfo", event_type: "TaskEventType"
+    ) -> None:
         """进度更新时刷新任务列表
 
-        使用增量更新提高性能，只更新变化的行。
+        根据事件类型处理不同的更新操作。
 
         Args:
             task_id: 任务ID
-            task_info: 任务信息
+            task_info: 任务信息快照
+            event_type: 事件类型（CREATED/UPDATED/DELETED）
         """
+        from src.core.progress import TaskEventType
+
         table = self.query_one("#tasks-table", TaskTable)
-        # 使用 TaskTable 的增量更新方法
-        table.update_row(task_info)
+
+        if event_type == TaskEventType.DELETED:
+            # 任务已删除，从表格中移除
+            table.remove_task(task_id)
+        else:
+            # CREATED 或 UPDATED：使用增量更新方法
+            table.update_row(task_info)
 
     def on_key(self, event: Key) -> None:
         """处理键盘事件

@@ -16,6 +16,10 @@ class TaskStatus(str, Enum):
     状态流转：
     PENDING → QUEUED → DOWNLOADING → COMPLETED/FAILED/CANCELLED
                       ↘ RETRYING ↗
+
+    状态分类：
+    - 非持久状态（需在启动时重置为 PENDING）：QUEUED, DOWNLOADING, RETRYING
+    - 持久状态（加载后保持不变）：PENDING, COMPLETED, FAILED, CANCELLED
     """
 
     PENDING = "pending"  # 待下载（初始状态）
@@ -25,6 +29,40 @@ class TaskStatus(str, Enum):
     FAILED = "failed"  # 失败
     CANCELLED = "cancelled"  # 已取消
     RETRYING = "retrying"  # 重试中
+
+    @classmethod
+    def get_transient_statuses(cls) -> set:
+        """获取非持久状态集合
+
+        这些状态在应用崩溃后需要重置为 PENDING。
+
+        Returns:
+            set: 非持久状态集合
+        """
+        return {cls.QUEUED, cls.DOWNLOADING, cls.RETRYING}
+
+    @classmethod
+    def get_terminal_statuses(cls) -> set:
+        """获取终态集合
+
+        终态任务不能再转换到其他状态。只有 COMPLETED 是真正的终态。
+        FAILED 和 CANCELLED 可以重试（转换到 PENDING）。
+
+        Returns:
+            set: 终态集合
+        """
+        return {cls.COMPLETED}
+
+    @classmethod
+    def get_finalizable_statuses(cls) -> set:
+        """获取可终态化状态集合
+
+        这些状态表示任务已结束（成功、失败或取消），但失败和取消可以重新入队。
+
+        Returns:
+            set: 可终态化状态集合
+        """
+        return {cls.COMPLETED, cls.FAILED, cls.CANCELLED}
 
 
 class TaskEventType(str, Enum):

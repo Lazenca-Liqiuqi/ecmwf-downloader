@@ -272,6 +272,356 @@ class TestProgressManagerUpdateStatus:
         manager.update_status("nonexistent", TaskStatus.DOWNLOADING)
 
 
+class TestProgressManagerTransition:
+    """测试状态转换"""
+
+    def test_transition_pending_to_queued(self, temp_progress_file):
+        """测试 PENDING → QUEUED 合法转换"""
+        manager = ProgressManager(progress_file=temp_progress_file)
+        manager.create_task(task_id="task_001", filename="data.nc")
+
+        result = manager.transition("task_001", TaskStatus.QUEUED)
+
+        assert result is True
+        task = manager.get_task("task_001")
+        assert task.status == TaskStatus.QUEUED
+
+    def test_transition_queued_to_downloading(self, temp_progress_file):
+        """测试 QUEUED → DOWNLOADING 合法转换"""
+        manager = ProgressManager(progress_file=temp_progress_file)
+        manager.create_task(task_id="task_001", filename="data.nc")
+        manager.transition("task_001", TaskStatus.QUEUED)
+
+        result = manager.transition("task_001", TaskStatus.DOWNLOADING)
+
+        assert result is True
+        task = manager.get_task("task_001")
+        assert task.status == TaskStatus.DOWNLOADING
+        assert task.started_at is not None
+
+    def test_transition_downloading_to_completed(self, temp_progress_file):
+        """测试 DOWNLOADING → COMPLETED 合法转换"""
+        manager = ProgressManager(progress_file=temp_progress_file)
+        manager.create_task(task_id="task_001", filename="data.nc")
+        manager.transition("task_001", TaskStatus.QUEUED)
+        manager.transition("task_001", TaskStatus.DOWNLOADING)
+
+        result = manager.transition("task_001", TaskStatus.COMPLETED)
+
+        assert result is True
+        task = manager.get_task("task_001")
+        assert task.status == TaskStatus.COMPLETED
+        assert task.completed_at is not None
+
+    def test_transition_invalid_raises_error(self, temp_progress_file):
+        """测试非法状态转换抛出异常"""
+        manager = ProgressManager(progress_file=temp_progress_file)
+        manager.create_task(task_id="task_001", filename="data.nc")
+
+        # PENDING → DOWNLOADING 是非法的（必须先 QUEUED）
+        with pytest.raises(ValueError, match="非法状态转换"):
+            manager.transition("task_001", TaskStatus.DOWNLOADING)
+
+    def test_transition_from_terminal_fails(self, temp_progress_file):
+        """测试从终态转换失败"""
+        manager = ProgressManager(progress_file=temp_progress_file)
+        manager.create_task(task_id="task_001", filename="data.nc")
+        manager.transition("task_001", TaskStatus.QUEUED)
+        manager.transition("task_001", TaskStatus.DOWNLOADING)
+        manager.transition("task_001", TaskStatus.COMPLETED)
+
+        # COMPLETED 是终态，不能转换
+        with pytest.raises(ValueError, match="非法状态转换"):
+            manager.transition("task_001", TaskStatus.PENDING)
+
+    def test_transition_nonexistent_task_returns_false(self, temp_progress_file):
+        """测试转换不存在的任务返回 False"""
+        manager = ProgressManager(progress_file=temp_progress_file)
+
+        result = manager.transition("nonexistent", TaskStatus.QUEUED)
+
+        assert result is False
+
+
+class TestProgressManagerEnqueue:
+    """测试入队操作"""
+
+    def test_enqueue_pending_task(self, temp_progress_file):
+        """测试入队 PENDING 任务"""
+        manager = ProgressManager(progress_file=temp_progress_file)
+        manager.create_task(task_id="task_001", filename="data.nc")
+
+        result = manager.enqueue("task_001")
+
+        assert result is True
+        task = manager.get_task("task_001")
+        assert task.status == TaskStatus.QUEUED
+
+    def test_enqueue_non_pending_raises_error(self, temp_progress_file):
+        """测试入队非 PENDING 任务抛出异常"""
+        manager = ProgressManager(progress_file=temp_progress_file)
+        manager.create_task(task_id="task_001", filename="data.nc")
+        manager.transition("task_001", TaskStatus.QUEUED)
+
+        # QUEUED 任务不能再入队
+        with pytest.raises(ValueError, match="非法状态转换"):
+            manager.enqueue("task_001")
+
+    def test_enqueue_all_pending(self, temp_progress_file):
+        """测试批量入队所有 PENDING 任务"""
+        manager = ProgressManager(progress_file=temp_progress_file)
+        manager.create_task(task_id="task_001", filename="data1.nc")
+        manager.create_task(task_id="task_002", filename="data2.nc")
+        manager.create_task(task_id="task_003", filename="data3.nc")
+        # 将 task_002 入队，剩下两个 PENDING
+        manager.enqueue("task_002")
+
+        count = manager.enqueue_all_pending()
+
+        assert count == 2
+        assert manager.get_task("task_001").status == TaskStatus.QUEUED
+        assert manager.get_task("task_002").status == TaskStatus.QUEUED
+        assert manager.get_task("task_003").status == TaskStatus.QUEUED
+
+    def test_enqueue_notifies_observer(self, temp_progress_file):
+        """测试入队时通知观察者"""
+        manager = ProgressManager(progress_file=temp_progress_file)
+        manager.create_task(task_id="task_001", filename="data.nc")
+
+        notified = []
+
+        def observer(task_id, task_info, event_type):
+            notified.append((task_id, task_info.status, event_type))
+
+        manager.register_observer(observer)
+        manager.enqueue("task_001")
+
+        assert len(notified) == 1
+        assert notified[0][0] == "task_001"
+        assert notified[0][1] == TaskStatus.QUEUED
+
+
+class TestProgressManagerReconcile:
+    """测试加载时状态修复"""
+
+    def test_reconcile_downloading_to_pending(self, tmp_path):
+        """测试 DOWNLOADING 状态被修复为 PENDING"""
+        # 创建包含 DOWNLOADING 状态的测试文件
+        progress_file = tmp_path / "progress.json"
+        data = {
+            "tasks": [
+                {
+                    "task_id": "task_001",
+                    "filename": "data.nc",
+                    "status": "downloading",
+                    "progress": 50.0,
+                    "account_id": "account_1",
+                    "retry_count": 0,
+                    "created_at": "2024-01-25T10:00:00",
+                    "started_at": "2024-01-25T10:00:05",
+                    "completed_at": None,
+                    "file_size": None,
+                    "downloaded_size": 512,
+                    "metadata": {},
+                }
+            ]
+        }
+        import json
+        with open(progress_file, "w") as f:
+            json.dump(data, f)
+
+        manager = ProgressManager(progress_file=progress_file)
+
+        task = manager.get_task("task_001")
+        assert task.status == TaskStatus.PENDING
+        assert task.progress == 50.0  # 进度保留
+        assert task.account_id is None  # account_id 被清空
+
+    def test_reconcile_queued_to_pending(self, tmp_path):
+        """测试 QUEUED 状态被修复为 PENDING"""
+        progress_file = tmp_path / "progress.json"
+        data = {
+            "tasks": [
+                {
+                    "task_id": "task_001",
+                    "filename": "data.nc",
+                    "status": "queued",
+                    "progress": 0.0,
+                    "account_id": None,
+                    "retry_count": 0,
+                    "created_at": "2024-01-25T10:00:00",
+                    "started_at": None,
+                    "completed_at": None,
+                    "file_size": None,
+                    "downloaded_size": 0,
+                    "metadata": {},
+                }
+            ]
+        }
+        import json
+        with open(progress_file, "w") as f:
+            json.dump(data, f)
+
+        manager = ProgressManager(progress_file=progress_file)
+
+        task = manager.get_task("task_001")
+        assert task.status == TaskStatus.PENDING
+
+    def test_reconcile_preserves_terminal_states(self, tmp_path):
+        """测试终态任务不被修复"""
+        progress_file = tmp_path / "progress.json"
+        data = {
+            "tasks": [
+                {
+                    "task_id": "task_001",
+                    "filename": "data.nc",
+                    "status": "completed",
+                    "progress": 100.0,
+                    "account_id": "account_1",
+                    "retry_count": 0,
+                    "created_at": "2024-01-25T10:00:00",
+                    "started_at": "2024-01-25T10:00:05",
+                    "completed_at": "2024-01-25T10:05:00",
+                    "file_size": 1024,
+                    "downloaded_size": 1024,
+                    "metadata": {},
+                },
+                {
+                    "task_id": "task_002",
+                    "filename": "data2.nc",
+                    "status": "failed",
+                    "progress": 30.0,
+                    "error_message": "Timeout",
+                    "account_id": None,
+                    "retry_count": 3,
+                    "created_at": "2024-01-25T10:00:00",
+                    "started_at": "2024-01-25T10:00:05",
+                    "completed_at": "2024-01-25T10:05:00",
+                    "file_size": None,
+                    "downloaded_size": 300,
+                    "metadata": {},
+                },
+            ]
+        }
+        import json
+        with open(progress_file, "w") as f:
+            json.dump(data, f)
+
+        manager = ProgressManager(progress_file=progress_file)
+
+        # COMPLETED 和 FAILED 状态保持不变
+        assert manager.get_task("task_001").status == TaskStatus.COMPLETED
+        assert manager.get_task("task_001").account_id == "account_1"
+        assert manager.get_task("task_002").status == TaskStatus.FAILED
+
+    def test_reconcile_clears_started_at(self, tmp_path):
+        """测试 reconcile 清空 started_at"""
+        progress_file = tmp_path / "progress.json"
+        data = {
+            "tasks": [
+                {
+                    "task_id": "task_001",
+                    "filename": "data.nc",
+                    "status": "downloading",
+                    "progress": 50.0,
+                    "account_id": "account_1",
+                    "retry_count": 0,
+                    "created_at": "2024-01-25T10:00:00",
+                    "started_at": "2024-01-25T10:00:05",
+                    "completed_at": None,
+                    "file_size": None,
+                    "downloaded_size": 512,
+                    "metadata": {},
+                }
+            ]
+        }
+        import json
+        with open(progress_file, "w") as f:
+            json.dump(data, f)
+
+        manager = ProgressManager(progress_file=progress_file)
+
+        task = manager.get_task("task_001")
+        assert task.status == TaskStatus.PENDING
+        assert task.started_at is None  # started_at 被清空
+
+    def test_reconcile_retrying_to_pending(self, tmp_path):
+        """测试 RETRYING 状态被修复为 PENDING"""
+        progress_file = tmp_path / "progress.json"
+        data = {
+            "tasks": [
+                {
+                    "task_id": "task_001",
+                    "filename": "data.nc",
+                    "status": "retrying",
+                    "progress": 30.0,
+                    "account_id": "account_1",
+                    "retry_count": 2,
+                    "created_at": "2024-01-25T10:00:00",
+                    "started_at": "2024-01-25T10:00:05",
+                    "completed_at": None,
+                    "file_size": None,
+                    "downloaded_size": 300,
+                    "metadata": {},
+                }
+            ]
+        }
+        import json
+        with open(progress_file, "w") as f:
+            json.dump(data, f)
+
+        manager = ProgressManager(progress_file=progress_file)
+
+        task = manager.get_task("task_001")
+        assert task.status == TaskStatus.PENDING
+        assert task.account_id is None
+        assert task.started_at is None
+        assert task.retry_count == 2  # retry_count 保留
+
+    def test_transition_failed_to_pending_clears_fields(self, temp_progress_file):
+        """测试 FAILED → PENDING 清空终态相关字段"""
+        manager = ProgressManager(progress_file=temp_progress_file)
+        manager.create_task(task_id="task_001", filename="data.nc")
+        manager.transition("task_001", TaskStatus.QUEUED)
+        manager.transition("task_001", TaskStatus.DOWNLOADING)
+        manager.transition("task_001", TaskStatus.FAILED, "Connection timeout")
+
+        # 验证终态字段已设置
+        task = manager.get_task("task_001")
+        assert task.status == TaskStatus.FAILED
+        assert task.completed_at is not None
+        assert task.error_message == "Connection timeout"
+
+        # 重新入队
+        manager.transition("task_001", TaskStatus.PENDING)
+
+        task = manager.get_task("task_001")
+        assert task.status == TaskStatus.PENDING
+        assert task.completed_at is None  # 被清空
+        assert task.started_at is None  # 被清空
+        assert task.error_message is None  # 被清空
+
+    def test_transition_cancelled_to_pending_clears_fields(self, temp_progress_file):
+        """测试 CANCELLED → PENDING 清空终态相关字段"""
+        manager = ProgressManager(progress_file=temp_progress_file)
+        manager.create_task(task_id="task_001", filename="data.nc")
+        manager.transition("task_001", TaskStatus.QUEUED)
+        manager.transition("task_001", TaskStatus.CANCELLED)
+
+        # 验证终态字段已设置
+        task = manager.get_task("task_001")
+        assert task.status == TaskStatus.CANCELLED
+        assert task.completed_at is not None
+
+        # 重新入队
+        manager.transition("task_001", TaskStatus.PENDING)
+
+        task = manager.get_task("task_001")
+        assert task.status == TaskStatus.PENDING
+        assert task.completed_at is None  # 被清空
+        assert task.started_at is None  # 被清空
+
+
 class TestProgressManagerUpdateProgress:
     """测试更新任务进度"""
 
@@ -553,18 +903,25 @@ class TestProgressManagerPersistence:
         assert "updated_at" in data
 
     def test_load_from_file(self, sample_progress_file):
-        """测试从文件加载"""
+        """测试从文件加载（非持久状态会被 reconcile）"""
         manager = ProgressManager(progress_file=sample_progress_file)
 
         assert manager.get_task_count() == 3
 
+        # 终态任务保持不变
         task_001 = manager.get_task("task_001")
         assert task_001.status == TaskStatus.COMPLETED
         assert task_001.progress == 100.0
 
+        # DOWNLOADING 状态被 reconcile 为 PENDING
         task_002 = manager.get_task("task_002")
-        assert task_002.status == TaskStatus.DOWNLOADING
-        assert task_002.progress == 45.5
+        assert task_002.status == TaskStatus.PENDING
+        assert task_002.progress == 45.5  # 进度保留
+        assert task_002.account_id is None  # account_id 被清空
+
+        # FAILED 状态是终态，保持不变
+        task_003 = manager.get_task("task_003")
+        assert task_003.status == TaskStatus.FAILED
 
     def test_save_without_file_no_error(self):
         """测试不指定文件时保存不抛出异常"""

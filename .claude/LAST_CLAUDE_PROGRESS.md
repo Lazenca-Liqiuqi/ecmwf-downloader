@@ -14,81 +14,84 @@
 
 ## 工作任务
 
-本次对话完成了存储层重构与 Codex 审查修复：
+本次对话完成了任务 #6（load-time reconcile）和 #7（transition/enqueue 方法），并修复了 Codex 审查发现的 P0 问题：
 
 | # | 任务 | 负责者 | 状态 |
 |---|------|--------|------|
-| 4 | 重构 ProgressManager 使用 TaskStore | Claude Code | ✅ 完成 |
-| 5 | 实现从旧文件到新文件的数据迁移 | Claude Code | ✅ 完成 |
-| - | Codex 审查问题修复（P0/P1） | Claude Code | ✅ 完成 |
+| 6 | 实现 load-time reconcile 修复逻辑 | Claude Code | ✅ 完成 |
+| 7 | 新增 transition()/enqueue() 方法 | Claude Code | ✅ 完成 |
+| - | Codex 审查 P0 问题修复 | Claude Code | ✅ 完成 |
 
 ## 工作内容
 
-### 1. 任务 #4：重构 ProgressManager 使用 TaskStore
+### 1. 任务 #6：load-time reconcile 修复逻辑
 
-**问题**：原有 ProgressManager 直接操作文件系统，难以切换存储策略，且与 progress_store.py 存在循环依赖。
+**目的**：应用启动加载任务时，修复崩溃后遗留的非持久状态。
 
-**解决方案**：
-1. 创建 `src/core/models.py` - 提取数据模型避免循环依赖
-   - `TaskStatus` 枚举
-   - `TaskEventType` 枚举
-   - `TaskInfo` 数据类
+**实现**：
+1. `src/core/models.py` - 添加 `TaskStatus` 类方法
+   - `get_transient_statuses()` - 返回非持久状态集合 {QUEUED, DOWNLOADING, RETRYING}
+   - `get_terminal_statuses()` - 返回终态集合 {COMPLETED}
+   - `get_finalizable_statuses()` - 返回可终态化状态集合 {COMPLETED, FAILED, CANCELLED}
 
-2. 重构 `src/core/progress.py`：
-   - `__init__` 接受 `store: TaskStore` 参数
-   - 保持向后兼容：如果只提供 `progress_file`，自动创建 `SingleFileTaskStore`
-   - `load()` / `save()` 委托给 `TaskStore`
-   - 新增 `save_task()` 方法
-   - 新增 `store` 和 `progress_file` 属性
+2. `src/core/progress.py` - 添加修复逻辑
+   - `_reconcile_tasks()` - 将非持久状态重置为 PENDING，清空 account_id 和 started_at
+   - 修改 `load()` - 加载后自动调用 `_reconcile_tasks()`，如有修复则自动保存
 
-3. 更新 `src/core/__init__.py` - 导出存储类和数据模型
+### 2. 任务 #7：transition() 和 enqueue() 方法
 
-### 2. 任务 #5：实现数据迁移
+**目的**：提供安全的状态转换方法，确保状态流转符合业务规则。
 
-**在 `MultiFileTaskStore` 中添加方法**：
-- `needs_migration(single_file_path)` - 检查是否需要迁移
-- `migrate_from_single_file(single_file_path, remove_source)` - 执行迁移
+**实现**：
+1. `src/core/progress.py` - 添加状态转换机制
+   - `VALID_TRANSITIONS` - 状态转换映射表
+   - `can_transition(current, target)` - 验证状态转换是否合法
+   - `transition(task_id, target_status, error_message)` - 执行状态转换（验证 + 执行 + 通知）
+   - `enqueue(task_id)` - 将 PENDING 任务入队到 QUEUED
+   - `enqueue_all_pending()` - 批量入队所有 PENDING 任务
 
-### 3. Codex 审查修复
+**状态转换规则**：
+```
+PENDING → {QUEUED, CANCELLED}
+QUEUED → {DOWNLOADING, PENDING, CANCELLED}
+DOWNLOADING → {COMPLETED, FAILED, CANCELLED, RETRYING}
+RETRYING → {DOWNLOADING, FAILED, CANCELLED, PENDING}
+FAILED → {PENDING}  # 可重试
+CANCELLED → {PENDING}  # 可重新入队
+COMPLETED → {}  # 终态不可转换
+```
 
-**第一次审查（7.2/10）发现的问题**：
+### 3. Codex 审查 P0 问题修复
+
+**第一次审查（68/100）发现的问题**：
 
 | 优先级 | 问题 | 修复内容 |
 |--------|------|----------|
-| P0 | 异常契约不一致 | 更新 TaskStore 抽象接口 docstring，明确可能抛出 ProgressLoadError |
-| P0 | unlink 异常未包装 | 所有 4 处 `unlink()` 操作包装在 try-except 中 |
-| P1 | 浅拷贝问题 | 添加 `_deep_copy_task()` 函数实现深拷贝 |
-
-**第二次审查（8.7/10）确认修复完成**。
+| P0 | 终态语义矛盾 | 只有 COMPLETED 是真正的终态，新增 `get_finalizable_statuses()` |
+| P0 | reconcile 不清空 started_at | 修复 `_reconcile_tasks()` 清空 started_at |
+| P1 | reconcile 不回写存储 | 修改 `load()` 在 reconcile 后自动保存 |
+| P1 | 重新入队不清空终态字段 | 修改 `transition()` 在转换到 PENDING 时清空 completed_at/started_at/error_message |
 
 ## 交付物
-
-### 新建文件
-
-| 文件 | 说明 |
-|------|------|
-| `src/core/models.py` | 数据模型模块（TaskStatus、TaskEventType、TaskInfo） |
 
 ### 修改文件
 
 | 文件 | 修改内容 |
 |------|----------|
-| `src/core/progress.py` | 重构使用 TaskStore，添加深拷贝函数 |
-| `src/core/progress_store.py` | 添加迁移方法，修复异常包装 |
-| `src/core/__init__.py` | 更新导出 |
-| `tests/test_core/test_progress.py` | 更新观察者回调签名（2→3参数） |
+| `src/core/models.py` | 添加 `get_transient_statuses()`、`get_terminal_statuses()`、`get_finalizable_statuses()` |
+| `src/core/progress.py` | 添加 `VALID_TRANSITIONS`、`can_transition()`、`transition()`、`enqueue()`、`enqueue_all_pending()`、`_reconcile_tasks()` |
+| `tests/test_core/test_progress.py` | 新增 TestProgressManagerTransition、TestProgressManagerEnqueue、TestProgressManagerReconcile 测试类 |
 
 ## 状态变动
 
 ### 功能改进
-- 存储层抽象完成，ProgressManager 支持切换存储策略
-- 数据迁移功能实现
-- 深拷贝语义确保数据隔离
+- 状态机机制实现，确保状态转换合法性
+- 崩溃恢复机制完善，自动修复非持久状态
+- 重新入队清理终态字段，避免脏数据
 
-### 代码质量
-- 异常契约统一
-- unlink 操作安全包装
-- Codex 评分提升：7.2 → 8.7
+### 测试覆盖
+- 新增 13 个测试用例（Transition 6 + Enqueue 4 + Reconcile 3）
+- 总测试数：40 → 57
 
 ### 版本
 - 保持 v0.3.0
@@ -97,30 +100,30 @@
 
 ### 主要工具
 - **Claude Code**：代码修改、文件管理、任务系统
-- **Codex**：代码审查（两次审查，评分提升）
+- **Codex**：代码审查（两次审查，P0 问题修复）
 
 ### 技术栈
-- **Python**：抽象基类、枚举、数据类、深拷贝
-- **设计模式**：策略模式（TaskStore 接口）、观察者模式
+- **Python**：枚举、状态机、深拷贝、线程锁
+- **设计模式**：状态机模式、观察者模式
 
 ## 待处理
 
-1. `src/core/models.py` 需要执行 `git add` 添加到版本控制
-2. 任务 #6-#7, #9-#10 待实现（队列调度与状态迁移）
+1. 任务 #9：修改"开始下载"按钮为入队操作
+2. 任务 #10：实现 DownloadQueueScheduler 队列调度器
 
 ## 总结
 
-本次会话完成了 **ProgressManager 重构** 和 **数据迁移** 的核心工作：
+本次会话完成了 **状态机机制** 和 **崩溃恢复机制** 的核心实现：
 
 ### 主要成果
-- ✅ 循环依赖解决（models.py 模块提取）
-- ✅ 存储策略抽象（TaskStore 接口）
-- ✅ 深拷贝语义（避免外部修改穿透）
-- ✅ 异常契约统一（P0 问题修复）
+- ✅ 状态转换合法性验证（VALID_TRANSITIONS + transition）
+- ✅ 崩溃恢复逻辑（reconcile 非持久状态）
+- ✅ 终态语义统一（COMPLETED 是唯一终态）
+- ✅ 重新入队清理（避免脏数据残留）
 
 ### 后续任务
-- 🔄 #6 load-time reconcile
-- 🔄 #7 transition()/enqueue() 方法
-- 🔄 #9-#10 UI 集成和队列调度器
+- 🔄 #9 修改下载流程使用 QUEUED 状态
+- 🔄 #10 实现队列调度器
 
 ---
+

@@ -14,6 +14,27 @@ from src.core.exceptions import ProgressLoadError, ProgressSaveError
 from src.core.models import TaskEventType, TaskInfo, TaskStatus
 from src.core.progress_store import SingleFileTaskStore, TaskStore
 
+# 合法状态转换映射：{当前状态: {允许转换的目标状态集合}}
+VALID_TRANSITIONS: Dict[TaskStatus, set] = {
+    TaskStatus.PENDING: {TaskStatus.QUEUED, TaskStatus.CANCELLED},
+    TaskStatus.QUEUED: {TaskStatus.DOWNLOADING, TaskStatus.PENDING, TaskStatus.CANCELLED},
+    TaskStatus.DOWNLOADING: {
+        TaskStatus.COMPLETED,
+        TaskStatus.FAILED,
+        TaskStatus.CANCELLED,
+        TaskStatus.RETRYING,
+    },
+    TaskStatus.RETRYING: {
+        TaskStatus.DOWNLOADING,
+        TaskStatus.FAILED,
+        TaskStatus.CANCELLED,
+        TaskStatus.PENDING,
+    },
+    TaskStatus.COMPLETED: set(),  # 终态，不允许转换
+    TaskStatus.FAILED: {TaskStatus.PENDING},  # 失败可重试
+    TaskStatus.CANCELLED: {TaskStatus.PENDING},  # 取消可重新入队
+}
+
 if TYPE_CHECKING:
     pass
 
@@ -103,6 +124,9 @@ class ProgressManager:
     def load(self) -> None:
         """从存储加载进度
 
+        加载后会自动执行状态修复（reconcile），将非持久状态重置为 PENDING。
+        如果有任务被修复，会自动保存到存储以保持一致性。
+
         Raises:
             ProgressLoadError: 文件读取失败或格式错误
         """
@@ -111,6 +135,40 @@ class ProgressManager:
 
         with self._lock:
             self.tasks = self._store.load()
+            reconciled_count = self._reconcile_tasks()
+
+        # 如果有任务被修复，保存以保持存储一致性
+        if reconciled_count > 0:
+            try:
+                self.save()
+            except ProgressSaveError:
+                # 保存失败不影响启动，仅记录日志
+                pass
+
+    def _reconcile_tasks(self) -> int:
+        """修复任务状态
+
+        将非持久状态（QUEUED, DOWNLOADING, RETRYING）重置为 PENDING。
+        这在应用启动时调用，用于处理崩溃后遗留的不一致状态。
+
+        Returns:
+            int: 被修复的任务数量
+
+        Note:
+            此方法应在锁内调用。
+        """
+        transient_statuses = TaskStatus.get_transient_statuses()
+        reconciled_count = 0
+
+        for task in self.tasks.values():
+            if task.status in transient_statuses:
+                task.status = TaskStatus.PENDING
+                # 清除运行时数据，准备重新开始
+                task.account_id = None
+                task.started_at = None  # 重置开始时间，下次下载会重新记录
+                reconciled_count += 1
+
+        return reconciled_count
 
     def save(self) -> None:
         """保存进度到存储
@@ -176,6 +234,122 @@ class ProgressManager:
         self._notify_observers(task_id, task_snapshot, TaskEventType.CREATED)
 
         return task
+
+    def can_transition(self, current_status: TaskStatus, target_status: TaskStatus) -> bool:
+        """检查状态转换是否合法
+
+        Args:
+            current_status: 当前状态
+            target_status: 目标状态
+
+        Returns:
+            bool: 是否允许转换
+        """
+        if current_status not in VALID_TRANSITIONS:
+            return False
+        return target_status in VALID_TRANSITIONS[current_status]
+
+    def transition(
+        self,
+        task_id: str,
+        target_status: TaskStatus,
+        error_message: Optional[str] = None,
+    ) -> bool:
+        """安全的状态转换
+
+        验证状态转换是否合法，合法则执行转换并通知观察者。
+
+        Args:
+            task_id: 任务ID
+            target_status: 目标状态
+            error_message: 错误信息（可选，用于 FAILED 状态）
+
+        Returns:
+            bool: 是否成功转换
+
+        Raises:
+            ValueError: 状态转换不合法时抛出
+        """
+        task_snapshot = None
+        with self._lock:
+            task = self.tasks.get(task_id)
+            if task is None:
+                return False
+
+            current_status = task.status
+
+            # 验证状态转换
+            if not self.can_transition(current_status, target_status):
+                raise ValueError(
+                    f"非法状态转换: {current_status.value} → {target_status.value}"
+                )
+
+            # 执行状态转换
+            task.status = target_status
+
+            # 更新时间戳
+            if target_status == TaskStatus.DOWNLOADING and task.started_at is None:
+                task.started_at = datetime.now().isoformat()
+            elif target_status in TaskStatus.get_finalizable_statuses():
+                task.completed_at = datetime.now().isoformat()
+            elif target_status == TaskStatus.PENDING:
+                # 重新入队时清空终态相关字段
+                task.completed_at = None
+                task.started_at = None
+                task.error_message = None
+
+            # 记录错误信息
+            if error_message is not None:
+                task.error_message = error_message
+
+            # 构造快照用于锁外通知
+            task_snapshot = _deep_copy_task(task)
+
+        # 锁外通知观察者
+        if task_snapshot is not None:
+            self._notify_observers(task_id, task_snapshot, TaskEventType.UPDATED)
+
+        return True
+
+    def enqueue(self, task_id: str) -> bool:
+        """将任务入队
+
+        将 PENDING 状态的任务转换为 QUEUED 状态，准备被调度器调度。
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            bool: 是否成功入队
+
+        Raises:
+            ValueError: 任务状态不是 PENDING 时抛出
+        """
+        return self.transition(task_id, TaskStatus.QUEUED)
+
+    def enqueue_all_pending(self) -> int:
+        """将所有 PENDING 任务入队
+
+        Returns:
+            int: 成功入队的任务数量
+        """
+        enqueued_count = 0
+        task_ids_to_enqueue = []
+
+        with self._lock:
+            for task_id, task in self.tasks.items():
+                if task.status == TaskStatus.PENDING:
+                    task_ids_to_enqueue.append(task_id)
+
+        for task_id in task_ids_to_enqueue:
+            try:
+                self.enqueue(task_id)
+                enqueued_count += 1
+            except ValueError:
+                # 忽略转换失败的任务
+                pass
+
+        return enqueued_count
 
     def update_status(
         self,

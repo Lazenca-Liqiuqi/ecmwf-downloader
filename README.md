@@ -113,10 +113,15 @@ YAML    BaseAPIClient  CDSClient  ProgressManager
   - [x] AI参数生成功能
   - [x] 账号系统重构（uid→email）
   - [x] 配置系统重构（example模板）
+  - [x] 任务持久化与观察者重构
+  - [x] 任务状态扩展（QUEUED）
+  - [x] 存储层抽象（TaskStore）
+  - [x] 状态机机制（VALID_TRANSITIONS）
+  - [x] 崩溃恢复（reconcile）
+  - [ ] 多文件存储集成
+  - [ ] 队列调度器
   - [ ] 集成下载Worker与控制按钮
   - [ ] 实现批量下载功能
-  - [ ] 添加下载进度实时更新
-  - [ ] 实现断点续传功能
 
 ## 使用方法
 

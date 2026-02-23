@@ -10,12 +10,12 @@ ECMWF（European Centre for Medium-Range Weather Forecasts，欧洲中期天气�
 ECMWF downloader/
 ├── .claude/                      # 项目记忆组件
 ├── config/                       # 配置文件目录
+├── data/                         # 数据存储目录
+├── logs/                         # 日志目录
 ├── src/                          # 源代码目录
-│   ├── api/                      # API抽象层
-│   ├── core/                     # 核心业务逻辑层
-│   ├── ui/                       # 用户界面层
-│   └── utils/                    # 工具模块
 ├── tests/                        # 测试目录
+├── ecmwf.bat                     # 启动脚本
+├── pyproject.toml                # 项目配置
 ├── README.md                     # 项目说明
 └── CHANGELOG.md                  # 更新日志
 ```

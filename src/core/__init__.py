@@ -24,7 +24,8 @@ from src.core.exceptions import (
 )
 from src.core.models import TaskEventType, TaskInfo, TaskStatus
 from src.core.progress import ProgressManager
-from src.core.progress_store import MultiFileTaskStore, SingleFileTaskStore, TaskStore
+from src.core.progress_store import MultiFileTaskStore, TaskStore
+from src.core.queue_scheduler import DownloadQueueScheduler
 from src.core.request_builder import DownloadRequest, RequestBuilder
 from src.core.task_service import TaskService
 
@@ -56,8 +57,9 @@ __all__ = [
     "ProgressManager",
     # 存储层
     "TaskStore",
-    "SingleFileTaskStore",
     "MultiFileTaskStore",
+    # 队列调度器
+    "DownloadQueueScheduler",
     # 请求构建
     "DownloadRequest",
     "RequestBuilder",

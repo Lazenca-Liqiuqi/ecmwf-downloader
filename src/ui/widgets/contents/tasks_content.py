@@ -15,7 +15,6 @@ from textual.widget import Widget
 from textual.widgets import Button, Label
 
 from src.core.progress import TaskStatus
-from src.ui.workers.download_worker import start_download_task
 from src.ui.widgets.task_table import TaskTable
 
 if TYPE_CHECKING:
@@ -305,7 +304,11 @@ class TasksContent(Widget):
         self._load_tasks(status_filter=filter_type)
 
     def _handle_start(self) -> None:
-        """处理开始下载操作"""
+        """处理入队操作
+
+        将任务入队到等待调度状态，由队列调度器负责分配账号和启动下载。
+        只允许 PENDING 状态的任务入队。
+        """
         table = self.query_one("#tasks-table", TaskTable)
         task_id = table.get_selected_task_id()
 
@@ -318,12 +321,25 @@ class TasksContent(Widget):
             self.notify(f"任务 {task_id} 不存在", severity="error")
             return
 
+        # 只允许 PENDING 状态入队
         if task.status != TaskStatus.PENDING:
-            self.notify("只能开始待下载状态的任务", severity="warning")
+            status_names = {
+                TaskStatus.QUEUED: "已入队",
+                TaskStatus.DOWNLOADING: "下载中",
+                TaskStatus.COMPLETED: "已完成",
+                TaskStatus.FAILED: "已失败",
+                TaskStatus.CANCELLED: "已取消",
+                TaskStatus.RETRYING: "重试中",
+            }
+            status_name = status_names.get(task.status, task.status.value)
+            self.notify(f"只能入队待下载状态的任务，当前状态: {status_name}", severity="warning")
             return
 
-        start_download_task(self._app_ref, task_id)
-        self.notify(f"已开始下载任务 {task_id}", severity="information")
+        try:
+            self._app_ref.progress_manager.enqueue(task_id)
+            self.notify(f"任务 {task_id} 已入队等待调度", severity="information")
+        except ValueError as e:
+            self.notify(f"入队失败: {str(e)}", severity="error")
 
     def _handle_retry(self) -> None:
         """处理重试操作"""

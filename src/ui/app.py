@@ -10,6 +10,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Dict, Iterable, Optional, TYPE_CHECKING
 
+from textual import work
 from textual.app import App
 from textual.containers import Horizontal
 
@@ -25,6 +26,7 @@ from src.utils.config_initializer import initialize_config
 if TYPE_CHECKING:
     from src.core.account_pool import AccountPool
     from src.core.progress import ProgressManager
+    from src.core.queue_scheduler import DownloadQueueScheduler
     from src.ui.widgets.contents.home_content import HomeContent
     from src.ui.widgets.contents.tasks_content import TasksContent
     from src.ui.widgets.contents.download_content import DownloadContent
@@ -609,34 +611,34 @@ class ECMWFDownloaderApp(App):
         self,
         config_path: Optional[Path] = None,
         accounts_path: Optional[Path] = None,
-        progress_path: Optional[Path] = None,
+        data_dir: Optional[Path] = None,
     ):
         """初始化应用
 
         Args:
             config_path: 配置文件路径（可选，默认使用 config/default_config.yaml）
             accounts_path: 账号配置文件路径（可选，默认使用 config/accounts.yaml）
-            progress_path: 进度文件路径（可选，默认使用 data/download_progress.json）
+            data_dir: 数据目录路径（可选，默认使用 data/）
         """
         super().__init__()
 
         # 配置文件路径
         self._config_path = config_path or Path("config/default_config.yaml")
         self._accounts_path = accounts_path or Path("config/accounts.yaml")
-        self._progress_path = progress_path or Path("data/download_progress.json")
+        self._data_dir = data_dir or Path("data")
 
         # 核心模块实例（延迟加载）
         self._account_pool: Optional["AccountPool"] = None
         self._progress_manager: Optional["ProgressManager"] = None
+        self._queue_scheduler: Optional["DownloadQueueScheduler"] = None
 
         # 确保数据目录存在
         self._ensure_data_dir()
 
     def _ensure_data_dir(self) -> None:
         """确保数据目录存在"""
-        data_dir = self._progress_path.parent
-        if not data_dir.exists():
-            data_dir.mkdir(parents=True, exist_ok=True)
+        if not self._data_dir.exists():
+            self._data_dir.mkdir(parents=True, exist_ok=True)
 
     def compose(self) -> Iterable:
         """构建应用UI
@@ -661,7 +663,7 @@ class ECMWFDownloaderApp(App):
         self.log.info("ECMWF Downloader TUI 启动")
         self.log.info(f"配置文件: {self._config_path}")
         self.log.info(f"账号配置: {self._accounts_path}")
-        self.log.info(f"进度文件: {self._progress_path}")
+        self.log.info(f"数据目录: {self._data_dir}")
 
         # 显示首页（每次切换都会创建新的 Widget 实例）
         self.action_switch_page("home")
@@ -681,6 +683,10 @@ class ECMWFDownloaderApp(App):
             severity="information",
             timeout=5,
         )
+
+        # 初始化队列调度器（延迟加载，首次访问时自动启动）
+        # 这里显式调用以确保在启动时就初始化
+        _ = self.queue_scheduler
 
     def action_switch_page(self, page_id: str) -> None:
         """切换当前显示的页面（同步入口）
@@ -772,10 +778,82 @@ class ECMWFDownloaderApp(App):
             from src.core.progress import ProgressManager
 
             self._progress_manager = ProgressManager(
-                progress_file=self._progress_path
+                data_dir=self._data_dir
             )
             self.log.info("进度管理器初始化完成")
         return self._progress_manager
+
+    @property
+    def queue_scheduler(self) -> "DownloadQueueScheduler":
+        """获取队列调度器实例（延迟加载）
+
+        调度器会自动启动，定期检测 QUEUED 任务并启动下载。
+
+        Returns:
+            DownloadQueueScheduler: 队列调度器实例
+        """
+        if self._queue_scheduler is None:
+            from src.core.queue_scheduler import DownloadQueueScheduler
+
+            # 创建调度器（回调使用 call_from_thread 切回主线程）
+            self._queue_scheduler = DownloadQueueScheduler(
+                progress_manager=self.progress_manager,
+                account_pool=self.account_pool,
+                start_download_callback=self._start_download_from_scheduler,
+                max_workers=3,
+                poll_interval=1.0,
+            )
+            # 启动调度器
+            self._queue_scheduler.start()
+            self.log.info("队列调度器已启动")
+        return self._queue_scheduler
+
+    def _start_download_from_scheduler(self, task_id: str, account) -> None:
+        """调度器回调：在主线程中启动下载任务
+
+        调度器在后台线程中运行，需要通过 call_from_thread
+        切回主线程来调用 @work 装饰的方法。
+
+        Args:
+            task_id: 任务ID
+            account: 已分配的账号
+        """
+        # 使用 call_from_thread 确保在主线程中执行
+        self.call_from_thread(
+            self._run_download_worker,
+            task_id,
+            account,
+        )
+
+    @work(exclusive=False, thread=True)
+    def _run_download_worker(self, task_id: str, account) -> None:
+        """执行下载任务（@work 装饰，在后台线程运行）
+
+        这是真正的下载执行入口，满足 Textual 的 @work 要求
+        （self 必须是 DOMNode 子类）。
+
+        Args:
+            task_id: 任务ID
+            account: 已分配的账号
+        """
+        from src.ui.workers.download_worker import execute_download_with_account
+        execute_download_with_account(
+            app=self,
+            task_id=task_id,
+            account=account,
+            on_complete=self._on_download_complete,
+        )
+
+    def _on_download_complete(self, task_id: str) -> None:
+        """下载完成回调
+
+        通知调度器任务已完成，释放活动槽位。
+
+        Args:
+            task_id: 完成的任务ID
+        """
+        if self._queue_scheduler is not None:
+            self._queue_scheduler.on_task_completed(task_id)
 
     def on_unmount(self) -> None:
         """应用卸载时的生命周期钩子
@@ -812,14 +890,22 @@ class ECMWFDownloaderApp(App):
 
     async def _cleanup_before_exit(self) -> None:
         """退出前清理资源（不抛异常）"""
-        # 1) 停止内容区域的异步切换任务
+        # 1) 停止队列调度器
+        if self._queue_scheduler is not None:
+            try:
+                self._queue_scheduler.stop()
+                self.log.info("队列调度器已停止")
+            except Exception as e:
+                self.log.warning(f"停止队列调度器失败（已忽略）: {e}")
+
+        # 2) 停止内容区域的异步切换任务
         try:
             content_area = self.query_one("#main-content", ContentArea)
             await content_area.shutdown()
         except Exception as e:
             self.log.warning(f"清理内容区域失败（已忽略）: {e}")
 
-        # 2) 取消并等待 Textual workers（含 @work(thread=True)）
+        # 3) 取消并等待 Textual workers（含 @work(thread=True)）
         try:
             self.workers.cancel_all()
             with suppress(asyncio.TimeoutError):
@@ -829,7 +915,7 @@ class ECMWFDownloaderApp(App):
         except Exception as e:
             self.log.warning(f"清理后台任务失败（已忽略）: {e}")
 
-        # 3) 保存进度（失败不影响退出）
+        # 4) 保存进度（失败不影响退出）
         if self._progress_manager is not None:
             try:
                 self._progress_manager.save()

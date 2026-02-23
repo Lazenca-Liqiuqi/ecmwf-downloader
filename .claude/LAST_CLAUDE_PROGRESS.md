@@ -1,129 +1,71 @@
-# LAST_CLAUDE_PROGRESS.md
+# 工作进度记录（2026-02-23）
 
-## 项目概况
+## 本次工作概述
 
-**项目名称**：ECMWF Downloader
+完成了 Codex 审查报告（评分 63/100）中发现的 12 个问题的修复，经过两轮迭代，最终评分提升至 **85/100**。
 
-**项目阶段**：第五阶段（下载功能集成）**进行中**
+## 第一轮：修复 P0/P1 问题（8个）
 
-**版本**：v0.3.0
+### P0 问题（4个）
 
-**日期**：2026-02-22
+| # | 问题 | 修复方案 | 文件 |
+|---|------|----------|------|
+| P0-1 | 重试状态机逻辑矛盾 | `increment_retry()` 只递增计数不改状态 | progress.py, download_worker.py |
+| P0-2 | 状态机被 `update_status()` 绕过 | 扩展 `VALID_TRANSITIONS` 添加失败路径 | progress.py |
+| P0-3 | 调度器启动失败回退不一致 | 启动失败时恢复原状态（QUEUED/RETRYING） | queue_scheduler.py |
+| P0-4 | 持久化缺口 | `transition()` 在关键状态变更时调用 `save_task()` | progress.py |
 
-**工作目录**：D:\data\project\ECMWF downloader
+### P1 问题（4个）
 
-## 工作任务
+| # | 问题 | 修复方案 | 文件 |
+|---|------|----------|------|
+| P1-1 | 缺少重试退避 | 添加 `next_retry_at` 过滤未到时间的任务 | download_worker.py, queue_scheduler.py |
+| P1-2 | reconcile 字段清理不完整 | 完整清理 progress/downloaded_size/error_message 等字段 | progress.py |
+| P1-3 | UI 重试/取消未实现 | 实现 `_handle_retry()` 和 `_handle_cancel()` | tasks_screen.py |
+| P1-4 | 账号分配不通知观察者 | `set_account()` 添加观察者通知 | progress.py |
 
-本次对话完成了任务 #6（load-time reconcile）和 #7（transition/enqueue 方法），并修复了 Codex 审查发现的 P0 问题：
+**第一轮评分**：63 → 79 (+16)
 
-| # | 任务 | 负责者 | 状态 |
-|---|------|--------|------|
-| 6 | 实现 load-time reconcile 修复逻辑 | Claude Code | ✅ 完成 |
-| 7 | 新增 transition()/enqueue() 方法 | Claude Code | ✅ 完成 |
-| - | Codex 审查 P0 问题修复 | Claude Code | ✅ 完成 |
+## 第二轮：修复审查发现的新问题（4个）
 
-## 工作内容
+| # | 问题 | 修复方案 | 文件 |
+|---|------|----------|------|
+| #1 | transition 落盘并发乱序风险 | 将 `save_task()` 移到锁内 | progress.py |
+| #2 | 调度器回退绕过状态机 | 添加 `DOWNLOADING -> QUEUED` 转换路径 | progress.py |
+| #3 | UI 重试未重置 retry_count | 新增 `reset_task_for_retry()` 方法 | progress.py, tasks_screen.py |
+| #4 | delete_task 未持久化 | 调用存储层 `delete_task()` | progress.py |
 
-### 1. 任务 #6：load-time reconcile 修复逻辑
+**第二轮评分**：79 → 85 (+6)
 
-**目的**：应用启动加载任务时，修复崩溃后遗留的非持久状态。
+## 测试结果
 
-**实现**：
-1. `src/core/models.py` - 添加 `TaskStatus` 类方法
-   - `get_transient_statuses()` - 返回非持久状态集合 {QUEUED, DOWNLOADING, RETRYING}
-   - `get_terminal_statuses()` - 返回终态集合 {COMPLETED}
-   - `get_finalizable_statuses()` - 返回可终态化状态集合 {COMPLETED, FAILED, CANCELLED}
+- 57 个 progress 模块测试全部通过
+- Codex 手工回归脚本验证通过
 
-2. `src/core/progress.py` - 添加修复逻辑
-   - `_reconcile_tasks()` - 将非持久状态重置为 PENDING，清空 account_id 和 started_at
-   - 修改 `load()` - 加载后自动调用 `_reconcile_tasks()`，如有修复则自动保存
+## 核心修改文件
 
-### 2. 任务 #7：transition() 和 enqueue() 方法
+| 文件 | 修改行数 | 主要变更 |
+|------|----------|----------|
+| `src/core/progress.py` | ~150 | 状态机、持久化、重置方法 |
+| `src/core/queue_scheduler.py` | ~50 | 退避过滤、回退逻辑 |
+| `src/ui/workers/download_worker.py` | ~80 | 退避设置、错误处理 |
+| `src/ui/screens/tasks_screen.py` | ~100 | 重试/取消功能实现 |
+| `tests/test_core/test_progress.py` | ~30 | 适配新 API |
 
-**目的**：提供安全的状态转换方法，确保状态流转符合业务规则。
+## Codex 审查信息
 
-**实现**：
-1. `src/core/progress.py` - 添加状态转换机制
-   - `VALID_TRANSITIONS` - 状态转换映射表
-   - `can_transition(current, target)` - 验证状态转换是否合法
-   - `transition(task_id, target_status, error_message)` - 执行状态转换（验证 + 执行 + 通知）
-   - `enqueue(task_id)` - 将 PENDING 任务入队到 QUEUED
-   - `enqueue_all_pending()` - 批量入队所有 PENDING 任务
+- **第一轮 Thread ID**: 未记录
+- **第二轮 Thread ID**: `019c8b8e-5585-7c01-b478-e85130f3ff80`
+- **最终评分**: 85/100
 
-**状态转换规则**：
-```
-PENDING → {QUEUED, CANCELLED}
-QUEUED → {DOWNLOADING, PENDING, CANCELLED}
-DOWNLOADING → {COMPLETED, FAILED, CANCELLED, RETRYING}
-RETRYING → {DOWNLOADING, FAILED, CANCELLED, PENDING}
-FAILED → {PENDING}  # 可重试
-CANCELLED → {PENDING}  # 可重新入队
-COMPLETED → {}  # 终态不可转换
-```
+## 待处理的风险点（非阻塞）
 
-### 3. Codex 审查 P0 问题修复
+1. `update_status()` 仍作为降级路径存在
+2. `reset_task_for_retry()` 不通知观察者
+3. 持久化异常被吞掉
 
-**第一次审查（68/100）发现的问题**：
+## 下一步建议
 
-| 优先级 | 问题 | 修复内容 |
-|--------|------|----------|
-| P0 | 终态语义矛盾 | 只有 COMPLETED 是真正的终态，新增 `get_finalizable_statuses()` |
-| P0 | reconcile 不清空 started_at | 修复 `_reconcile_tasks()` 清空 started_at |
-| P1 | reconcile 不回写存储 | 修改 `load()` 在 reconcile 后自动保存 |
-| P1 | 重新入队不清空终态字段 | 修改 `transition()` 在转换到 PENDING 时清空 completed_at/started_at/error_message |
-
-## 交付物
-
-### 修改文件
-
-| 文件 | 修改内容 |
-|------|----------|
-| `src/core/models.py` | 添加 `get_transient_statuses()`、`get_terminal_statuses()`、`get_finalizable_statuses()` |
-| `src/core/progress.py` | 添加 `VALID_TRANSITIONS`、`can_transition()`、`transition()`、`enqueue()`、`enqueue_all_pending()`、`_reconcile_tasks()` |
-| `tests/test_core/test_progress.py` | 新增 TestProgressManagerTransition、TestProgressManagerEnqueue、TestProgressManagerReconcile 测试类 |
-
-## 状态变动
-
-### 功能改进
-- 状态机机制实现，确保状态转换合法性
-- 崩溃恢复机制完善，自动修复非持久状态
-- 重新入队清理终态字段，避免脏数据
-
-### 测试覆盖
-- 新增 13 个测试用例（Transition 6 + Enqueue 4 + Reconcile 3）
-- 总测试数：40 → 57
-
-### 版本
-- 保持 v0.3.0
-
-## 工具
-
-### 主要工具
-- **Claude Code**：代码修改、文件管理、任务系统
-- **Codex**：代码审查（两次审查，P0 问题修复）
-
-### 技术栈
-- **Python**：枚举、状态机、深拷贝、线程锁
-- **设计模式**：状态机模式、观察者模式
-
-## 待处理
-
-1. 任务 #9：修改"开始下载"按钮为入队操作
-2. 任务 #10：实现 DownloadQueueScheduler 队列调度器
-
-## 总结
-
-本次会话完成了 **状态机机制** 和 **崩溃恢复机制** 的核心实现：
-
-### 主要成果
-- ✅ 状态转换合法性验证（VALID_TRANSITIONS + transition）
-- ✅ 崩溃恢复逻辑（reconcile 非持久状态）
-- ✅ 终态语义统一（COMPLETED 是唯一终态）
-- ✅ 重新入队清理（避免脏数据残留）
-
-### 后续任务
-- 🔄 #9 修改下载流程使用 QUEUED 状态
-- 🔄 #10 实现队列调度器
-
----
-
+1. 考虑移除或限制 `update_status()` 的使用
+2. 为 `reset_task_for_retry()` 添加观察者通知
+3. 添加持久化失败的日志告警

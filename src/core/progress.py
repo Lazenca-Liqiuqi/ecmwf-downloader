@@ -2,6 +2,7 @@
 ECMWF下载器进度管理模块
 
 实现线程安全的任务进度管理，支持持久化和观察者模式。
+使用多文件存储策略，按任务状态分文件存储。
 """
 
 import copy
@@ -12,23 +13,36 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from src.core.exceptions import ProgressLoadError, ProgressSaveError
 from src.core.models import TaskEventType, TaskInfo, TaskStatus
-from src.core.progress_store import SingleFileTaskStore, TaskStore
+from src.core.progress_store import MultiFileTaskStore, TaskStore
 
 # 合法状态转换映射：{当前状态: {允许转换的目标状态集合}}
+# P0-2 修复：扩展失败转换路径，避免 update_status() 绕过校验
+# 审查修复 #2：添加 DOWNLOADING -> QUEUED 路径，支持调度器启动失败回退
 VALID_TRANSITIONS: Dict[TaskStatus, set] = {
-    TaskStatus.PENDING: {TaskStatus.QUEUED, TaskStatus.CANCELLED},
-    TaskStatus.QUEUED: {TaskStatus.DOWNLOADING, TaskStatus.PENDING, TaskStatus.CANCELLED},
+    TaskStatus.PENDING: {
+        TaskStatus.QUEUED,
+        TaskStatus.FAILED,  # P0-2: 参数缺失等错误可直转失败
+        TaskStatus.CANCELLED,
+    },
+    TaskStatus.QUEUED: {
+        TaskStatus.DOWNLOADING,
+        TaskStatus.PENDING,  # 用户取消入队
+        TaskStatus.FAILED,   # P0-2: 调度失败
+        TaskStatus.CANCELLED,
+    },
     TaskStatus.DOWNLOADING: {
         TaskStatus.COMPLETED,
         TaskStatus.FAILED,
         TaskStatus.CANCELLED,
         TaskStatus.RETRYING,
+        TaskStatus.QUEUED,   # 审查修复 #2: 调度器启动失败回退
     },
     TaskStatus.RETRYING: {
         TaskStatus.DOWNLOADING,
         TaskStatus.FAILED,
         TaskStatus.CANCELLED,
         TaskStatus.PENDING,
+        TaskStatus.QUEUED,  # P0-2: 重试失败时回队列等待
     },
     TaskStatus.COMPLETED: set(),  # 终态，不允许转换
     TaskStatus.FAILED: {TaskStatus.PENDING},  # 失败可重试
@@ -60,33 +74,34 @@ class ProgressManager:
     """进度管理器
 
     管理所有下载任务的进度和状态，提供线程安全的操作接口。
-    支持持久化到JSON文件和观察者模式。
+    支持持久化到多文件 JSON 存储和观察者模式。
 
     存储策略：
-    - 可通过 progress_file 参数使用单文件存储（向后兼容）
-    - 可通过 store 参数使用自定义存储实现（如 MultiFileTaskStore）
+    - 使用 MultiFileTaskStore 按状态分文件存储
+    - 可通过 data_dir 参数指定数据目录
+    - 可通过 store 参数注入自定义存储实现
     """
 
     def __init__(
         self,
-        progress_file: Optional[Path] = None,
+        data_dir: Optional[Path] = None,
         store: Optional[TaskStore] = None,
     ):
         """初始化进度管理器
 
         Args:
-            progress_file: 进度文件路径（单文件存储模式，向后兼容）
-            store: 自定义存储实现（优先级高于 progress_file）
+            data_dir: 数据目录路径（用于多文件存储，默认为 data/）
+            store: 自定义存储实现（优先级高于 data_dir）
 
         Note:
-            如果同时提供 store 和 progress_file，优先使用 store。
-            如果只提供 progress_file，会自动创建 SingleFileTaskStore。
+            如果同时提供 store 和 data_dir，优先使用 store。
+            如果只提供 data_dir，会自动创建 MultiFileTaskStore。
         """
         self._store: Optional[TaskStore] = store
 
-        # 向后兼容：如果只提供了 progress_file，创建单文件存储
-        if self._store is None and progress_file is not None:
-            self._store = SingleFileTaskStore(progress_file)
+        # 如果只提供了 data_dir，创建多文件存储
+        if self._store is None and data_dir is not None:
+            self._store = MultiFileTaskStore(data_dir)
 
         self.tasks: Dict[str, TaskInfo] = {}
 
@@ -102,14 +117,14 @@ class ProgressManager:
             self.load()
 
     @property
-    def progress_file(self) -> Optional[Path]:
-        """获取进度文件路径（向后兼容属性）
+    def data_dir(self) -> Optional[Path]:
+        """获取数据目录路径
 
         Returns:
-            Optional[Path]: 单文件存储路径，多文件存储返回 None
+            Optional[Path]: 多文件存储的数据目录
         """
-        if isinstance(self._store, SingleFileTaskStore):
-            return self._store.progress_file
+        if isinstance(self._store, MultiFileTaskStore):
+            return self._store.data_dir
         return None
 
     @property
@@ -151,6 +166,8 @@ class ProgressManager:
         将非持久状态（QUEUED, DOWNLOADING, RETRYING）重置为 PENDING。
         这在应用启动时调用，用于处理崩溃后遗留的不一致状态。
 
+        P1-2 修复：完整清理所有运行时字段。
+
         Returns:
             int: 被修复的任务数量
 
@@ -163,9 +180,18 @@ class ProgressManager:
         for task in self.tasks.values():
             if task.status in transient_statuses:
                 task.status = TaskStatus.PENDING
-                # 清除运行时数据，准备重新开始
+
+                # P1-2 修复：完整清理运行时字段
                 task.account_id = None
-                task.started_at = None  # 重置开始时间，下次下载会重新记录
+                task.started_at = None
+                task.progress = 0.0
+                task.downloaded_size = 0
+                task.error_message = None
+
+                # 清理 metadata 中的重试时间
+                if "next_retry_at" in task.metadata:
+                    del task.metadata["next_retry_at"]
+
                 reconciled_count += 1
 
         return reconciled_count
@@ -259,6 +285,9 @@ class ProgressManager:
 
         验证状态转换是否合法，合法则执行转换并通知观察者。
 
+        P0-4 修复：在关键状态转换时持久化到磁盘。
+        审查修复 #1：落盘移到锁内，避免并发乱序覆盖。
+
         Args:
             task_id: 任务ID
             target_status: 目标状态
@@ -271,6 +300,7 @@ class ProgressManager:
             ValueError: 状态转换不合法时抛出
         """
         task_snapshot = None
+
         with self._lock:
             task = self.tasks.get(task_id)
             if task is None:
@@ -302,10 +332,28 @@ class ProgressManager:
             if error_message is not None:
                 task.error_message = error_message
 
-            # 构造快照用于锁外通知
+            # 构造快照（用于通知和持久化）
             task_snapshot = _deep_copy_task(task)
 
-        # 锁外通知观察者
+            # 审查修复 #1：在锁内持久化，避免并发乱序
+            # 终态、入队、开始下载、重试时需要持久化
+            should_persist = target_status in (
+                TaskStatus.COMPLETED,
+                TaskStatus.FAILED,
+                TaskStatus.CANCELLED,
+                TaskStatus.QUEUED,
+                TaskStatus.DOWNLOADING,
+                TaskStatus.RETRYING,
+            )
+
+            if should_persist and self._store is not None:
+                try:
+                    self._store.save_task(task_id, task_snapshot)
+                except Exception:
+                    # 持久化失败不影响状态转换，仅记录日志
+                    pass
+
+        # 锁外通知观察者（避免死锁）
         if task_snapshot is not None:
             self._notify_observers(task_id, task_snapshot, TaskEventType.UPDATED)
 
@@ -422,43 +470,79 @@ class ProgressManager:
     def increment_retry(self, task_id: str) -> int:
         """增加任务的重试计数
 
+        P0-1 修复：只递增计数，不改状态。
+        状态转换由调用方通过 transition() 统一处理。
+
         Args:
             task_id: 任务ID
 
         Returns:
             int: 更新后的重试次数
         """
-        task_snapshot = None
-        retry_count = 0
         with self._lock:
             task = self.tasks.get(task_id)
             if task is None:
                 return 0
 
             task.retry_count += 1
-            task.status = TaskStatus.RETRYING
-            retry_count = task.retry_count
-
-            # 构造快照用于锁外通知（深拷贝避免外部修改）
-            task_snapshot = _deep_copy_task(task)
-
-        # 锁外通知观察者（避免死锁）
-        if task_snapshot is not None:
-            self._notify_observers(task_id, task_snapshot, TaskEventType.UPDATED)
-
-        return retry_count
+            return task.retry_count
 
     def set_account(self, task_id: str, account_id: str) -> None:
         """设置任务使用的账号
+
+        P1-4 修复：设置账号后通知观察者，让 UI 能看到账号变化。
 
         Args:
             task_id: 任务ID
             account_id: 账号ID
         """
+        task_snapshot = None
         with self._lock:
             task = self.tasks.get(task_id)
             if task is not None:
                 task.account_id = account_id
+                # P1-4 修复：构造快照用于锁外通知
+                task_snapshot = _deep_copy_task(task)
+
+        # P1-4 修复：锁外通知观察者
+        if task_snapshot is not None:
+            self._notify_observers(task_id, task_snapshot, TaskEventType.UPDATED)
+
+    def update_task_metadata(self, task_id: str, metadata_updates: Dict[str, Any]) -> None:
+        """更新任务的元数据
+
+        P1-1 修复：支持更新 metadata 中的字段（如 next_retry_at）。
+
+        Args:
+            task_id: 任务ID
+            metadata_updates: 要更新的元数据键值对
+        """
+        with self._lock:
+            task = self.tasks.get(task_id)
+            if task is not None:
+                task.metadata.update(metadata_updates)
+
+    def reset_task_for_retry(self, task_id: str) -> None:
+        """重置任务的运行时字段，准备重新下载
+
+        审查修复 #3：在 UI 重试时清零 retry_count 和其他运行时字段。
+
+        Args:
+            task_id: 任务ID
+        """
+        with self._lock:
+            task = self.tasks.get(task_id)
+            if task is not None:
+                task.retry_count = 0
+                task.progress = 0.0
+                task.downloaded_size = 0
+                task.account_id = None
+                task.started_at = None
+                task.completed_at = None
+                task.error_message = None
+                # 清理 metadata 中的重试时间
+                if "next_retry_at" in task.metadata:
+                    del task.metadata["next_retry_at"]
 
     def get_task(self, task_id: str) -> Optional[TaskInfo]:
         """获取任务信息（深拷贝副本）
@@ -504,6 +588,8 @@ class ProgressManager:
     def delete_task(self, task_id: str) -> bool:
         """删除任务
 
+        审查修复 #4：删除任务时同步持久化到存储层，避免重启后任务"复活"。
+
         Args:
             task_id: 任务ID
 
@@ -518,6 +604,14 @@ class ProgressManager:
             # 保存任务信息深拷贝副本（用于锁外通知观察者）
             task_snapshot = _deep_copy_task(self.tasks[task_id])
             del self.tasks[task_id]
+
+            # 审查修复 #4：在锁内同步删除存储层记录
+            if self._store is not None:
+                try:
+                    self._store.delete_task(task_id)
+                except Exception:
+                    # 存储层删除失败不影响内存删除
+                    pass
 
         # 锁外通知观察者（避免死锁）
         if task_snapshot is not None:

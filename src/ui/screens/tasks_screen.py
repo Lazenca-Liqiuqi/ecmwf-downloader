@@ -12,7 +12,6 @@ from textual.widgets import Button, Header, Footer, Input, Label
 from src.core.progress import TaskStatus
 from src.ui.widgets.task_table import TaskTable
 from src.ui.screens.base_screen import BaseScreen
-from src.ui.workers.download_worker import start_download_task
 
 
 class TasksScreen(BaseScreen):
@@ -242,7 +241,11 @@ class TasksScreen(BaseScreen):
         )
 
     def _handle_start(self) -> None:
-        """处理开始下载操作"""
+        """处理入队操作
+
+        将任务入队到等待调度状态，由队列调度器负责分配账号和启动下载。
+        只允许 PENDING 状态的任务入队。
+        """
         table = self.query_one("#tasks-table", TaskTable)
         task_id = table.get_selected_task_id()
 
@@ -255,15 +258,33 @@ class TasksScreen(BaseScreen):
             self.notify(f"任务 {task_id} 不存在", severity="error")
             return
 
+        # 只允许 PENDING 状态入队
         if task.status != TaskStatus.PENDING:
-            self.notify("只能开始待下载状态的任务", severity="warning")
+            status_names = {
+                TaskStatus.QUEUED: "已入队",
+                TaskStatus.DOWNLOADING: "下载中",
+                TaskStatus.COMPLETED: "已完成",
+                TaskStatus.FAILED: "已失败",
+                TaskStatus.CANCELLED: "已取消",
+                TaskStatus.RETRYING: "重试中",
+            }
+            status_name = status_names.get(task.status, task.status.value)
+            self.notify(f"只能入队待下载状态的任务，当前状态: {status_name}", severity="warning")
             return
 
-        start_download_task(self.app, task_id)
-        self.notify(f"已开始下载任务 {task_id}", severity="information")
+        try:
+            self.app.progress_manager.enqueue(task_id)
+            self.notify(f"任务 {task_id} 已入队等待调度", severity="information")
+        except ValueError as e:
+            self.notify(f"入队失败: {str(e)}", severity="error")
 
     def _handle_retry(self) -> None:
-        """处理重试操作"""
+        """处理重试操作
+
+        P1-3 修复：实现重试逻辑。
+        将 FAILED/CANCELLED 状态的任务转为 PENDING，然后自动入队。
+        审查修复 #3：重试时重置 retry_count 和运行时字段。
+        """
         table = self.query_one("#tasks-table", TaskTable)
         task_id = table.get_selected_task_id()
 
@@ -271,18 +292,51 @@ class TasksScreen(BaseScreen):
             self.notify("请先选择一个任务", severity="warning")
             return
 
-        # 检查任务状态
-        tasks = self.app.progress_manager.get_all_tasks()
-        task = next((t for t in tasks if t.task_id == task_id), None)
+        # 获取任务
+        task = self.app.progress_manager.get_task(task_id)
+        if task is None:
+            self.notify(f"任务 {task_id} 不存在", severity="error")
+            return
 
-        if task and task.status in [TaskStatus.FAILED, TaskStatus.CANCELLED]:
-            # TODO: 实现重试逻辑（需要下载Worker）
-            self.notify(f"重试任务 {task_id} 功能待实现", severity="information")
-        else:
-            self.notify("只能重试失败或已取消的任务", severity="warning")
+        # 只能重试失败或已取消的任务
+        if task.status not in [TaskStatus.FAILED, TaskStatus.CANCELLED]:
+            status_names = {
+                TaskStatus.PENDING: "待下载",
+                TaskStatus.QUEUED: "已入队",
+                TaskStatus.DOWNLOADING: "下载中",
+                TaskStatus.COMPLETED: "已完成",
+                TaskStatus.RETRYING: "重试中",
+            }
+            status_name = status_names.get(task.status, task.status.value)
+            self.notify(f"只能重试失败或已取消的任务，当前状态: {status_name}", severity="warning")
+            return
+
+        try:
+            # 审查修复 #3：重置运行时字段（retry_count、progress 等）
+            self.app.progress_manager.reset_task_for_retry(task_id)
+
+            # 转为 PENDING 状态
+            self.app.progress_manager.transition(task_id, TaskStatus.PENDING)
+
+            # 自动入队
+            self.app.progress_manager.enqueue(task_id)
+
+            self.notify(f"任务 {task_id} 已重新入队等待调度", severity="success")
+
+            # 刷新列表
+            self._load_tasks(
+                status_filter=self._current_filter,
+                search_text=self.query_one("#search-input", Input).value,
+            )
+        except ValueError as e:
+            self.notify(f"重试失败: {str(e)}", severity="error")
 
     def _handle_cancel(self) -> None:
-        """处理取消操作"""
+        """处理取消操作
+
+        P1-3 修复：实现取消逻辑。
+        只能取消 PENDING/QUEUED 状态的任务。
+        """
         table = self.query_one("#tasks-table", TaskTable)
         task_id = table.get_selected_task_id()
 
@@ -290,8 +344,36 @@ class TasksScreen(BaseScreen):
             self.notify("请先选择一个任务", severity="warning")
             return
 
-        # TODO: 实现取消逻辑
-        self.notify(f"取消任务 {task_id} 功能待实现", severity="information")
+        # 获取任务
+        task = self.app.progress_manager.get_task(task_id)
+        if task is None:
+            self.notify(f"任务 {task_id} 不存在", severity="error")
+            return
+
+        # 只能取消待处理或已入队的任务
+        if task.status not in [TaskStatus.PENDING, TaskStatus.QUEUED]:
+            status_names = {
+                TaskStatus.DOWNLOADING: "下载中",
+                TaskStatus.COMPLETED: "已完成",
+                TaskStatus.FAILED: "已失败",
+                TaskStatus.CANCELLED: "已取消",
+                TaskStatus.RETRYING: "重试中",
+            }
+            status_name = status_names.get(task.status, task.status.value)
+            self.notify(f"只能取消待下载或已入队的任务，当前状态: {status_name}", severity="warning")
+            return
+
+        try:
+            self.app.progress_manager.transition(task_id, TaskStatus.CANCELLED)
+            self.notify(f"任务 {task_id} 已取消", severity="success")
+
+            # 刷新列表
+            self._load_tasks(
+                status_filter=self._current_filter,
+                search_text=self.query_one("#search-input", Input).value,
+            )
+        except ValueError as e:
+            self.notify(f"取消失败: {str(e)}", severity="error")
 
     def _handle_delete(self) -> None:
         """处理删除操作"""

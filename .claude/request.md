@@ -1,94 +1,55 @@
-# Codex 审查请求：load-time reconcile + transition/enqueue 方法
+# Codex 第二轮修复验证审查请求
 
-## 项目状态
+## 项目信息
 
+**项目名称**：ECMWF Downloader
 **版本**：v0.3.0
-**阶段**：第五阶段（下载功能集成）进行中
-**当前任务**：任务 #6（load-time reconcile）+ 任务 #7（transition/enqueue 方法）
 
-## 工作内容
+## 审查背景
 
-### 任务 #6：load-time reconcile 修复逻辑
+根据上一轮审查（评分 79/100），已修复以下 4 个新发现的问题：
 
-**目的**：应用启动加载任务时，修复"不一致状态"（崩溃后遗留的非持久状态）
+| # | 问题 | 修复方案 | 修改文件 |
+|---|------|----------|----------|
+| 1 | transition 落盘并发乱序风险 | 将落盘移到锁内，避免并发乱序覆盖 | progress.py |
+| 2 | 调度器回退绕过状态机 | 在 VALID_TRANSITIONS 中添加 DOWNLOADING -> QUEUED 路径 | progress.py |
+| 3 | UI 重试未重置 retry_count | 添加 reset_task_for_retry() 方法并在重试时调用 | progress.py, tasks_screen.py |
+| 4 | delete_task 未持久化 | 在 delete_task() 中调用存储层 delete_task | progress.py |
 
-**实现**：
-1. `src/core/models.py` - 添加 `TaskStatus` 类方法
-   - `get_transient_statuses()` - 返回非持久状态集合 {QUEUED, DOWNLOADING, RETRYING}
-   - `get_terminal_statuses()` - 返回终态集合 {COMPLETED, FAILED, CANCELLED}
+## 需要审查的核心文件
 
-2. `src/core/progress.py` - 添加修复逻辑
-   - `_reconcile_tasks()` - 将非持久状态重置为 PENDING，清空 account_id
-   - 修改 `load()` - 加载后自动调用 `_reconcile_tasks()`
-
-### 任务 #7：transition() 和 enqueue() 方法
-
-**目的**：提供安全的状态转换方法，确保状态流转符合业务规则
-
-**实现**：
-1. `src/core/progress.py` - 添加状态转换机制
-   - `VALID_TRANSITIONS` - 状态转换映射表
-   - `can_transition(current, target)` - 验证状态转换是否合法
-   - `transition(task_id, target_status, error_message)` - 执行状态转换（验证 + 执行 + 通知）
-   - `enqueue(task_id)` - 将 PENDING 任务入队到 QUEUED
-   - `enqueue_all_pending()` - 批量入队所有 PENDING 任务
-
-**状态转换规则**：
-```
-PENDING → {QUEUED, CANCELLED}
-QUEUED → {DOWNLOADING, PENDING, CANCELLED}
-DOWNLOADING → {COMPLETED, FAILED, CANCELLED, RETRYING}
-RETRYING → {DOWNLOADING, FAILED, CANCELLED, PENDING}
-FAILED → {PENDING}  # 可重试
-CANCELLED → {PENDING}  # 可重新入队
-COMPLETED → {}  # 终态不可转换
-```
-
-## 审查范围
-
-### 核心文件
-1. `src/core/models.py` - 新增类方法
-2. `src/core/progress.py` - 新增状态转换和修复逻辑
-
-### 测试文件
-3. `tests/test_core/test_progress.py` - 新增测试用例
+| 文件 | 功能 | 变更说明 |
+|------|------|----------|
+| `src/core/progress.py` | 状态机、持久化 | 锁内落盘、新增转换路径、reset_task_for_retry、delete_task 持久化 |
+| `src/ui/screens/tasks_screen.py` | 任务列表 UI | 重试时调用 reset_task_for_retry |
 
 ## 审查关注点
 
-### 1. 状态转换设计
-- [ ] 状态转换规则是否合理完整
-- [ ] 终态和非终态的划分是否正确
-- [ ] 是否有遗漏的转换路径
+### 1. 修复验证
+- [ ] #1：落盘是否在锁内？是否避免了并发乱序风险？
+- [ ] #2：DOWNLOADING -> QUEUED 转换是否合法？调度器回退是否正确？
+- [ ] #3：reset_task_for_retry() 是否正确重置所有字段？UI 重试是否调用？
+- [ ] #4：delete_task() 是否正确调用存储层？
 
-### 2. Reconcile 逻辑
-- [ ] 非持久状态的识别是否正确
-- [ ] 修复后是否清除了必要的运行时数据（如 account_id）
-- [ ] 进度等业务数据是否正确保留
+### 2. 回归检查
+- [ ] 是否有修复引入的新问题？
+- [ ] 端到端链路是否仍然正常？
 
-### 3. 线程安全
-- [ ] transition() 方法的锁使用是否正确
-- [ ] 是否存在竞态条件
-
-### 4. 异常处理
-- [ ] 非法状态转换的异常是否清晰
-- [ ] 任务不存在时的处理是否合理
-
-### 5. 测试覆盖
-- [ ] 正常转换路径是否覆盖
-- [ ] 异常情况是否覆盖
-- [ ] reconcile 行为是否正确验证
+### 3. 测试验证
+- [ ] 57 个测试是否全部通过？
 
 ## 评分标准
 
 | 维度 | 权重 | 说明 |
 |------|------|------|
-| 状态机设计 | 30% | 转换规则合理性、完整性 |
-| 代码质量 | 25% | 线程安全、异常处理、可读性 |
-| 测试覆盖 | 25% | 测试用例完整性和正确性 |
-| 边界条件 | 20% | 特殊情况处理 |
+| 功能完整性 | 30% | 工作流是否完整 |
+| 状态机正确性 | 25% | 状态转换是否合法 |
+| 线程安全性 | 20% | 并发控制是否正确 |
+| 错误处理 | 15% | 异常处理是否完善 |
+| 代码质量 | 10% | 可读性、注释 |
 
-## 期望输出
+## 交付物
 
-1. 质量评分（1-10）
-2. 发现的问题列表（按优先级分类）
-3. 改进建议
+- 审查报告（更新 codex_review.md）
+- 评分（0-100）
+- 问题分级（如有）

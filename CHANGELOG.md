@@ -1,5 +1,69 @@
 # Changelog
 
+## 0.4.0 2026.02.23 状态机机制与崩溃恢复
+
+### 新增功能
+
+1. **新增**：状态机机制
+   - `VALID_TRANSITIONS` 定义合法状态转换路径
+   - `can_transition()` 方法校验转换合法性
+   - `transition()` 安全状态转换，失败抛 `ValueError`
+
+2. **新增**：崩溃恢复逻辑
+   - `reconcile()` 方法修复非持久状态
+   - 启动时自动将 QUEUED/DOWNLOADING/RETRYING 重置为 PENDING
+   - 完整清理运行时字段（progress、account_id、error_message 等）
+
+3. **新增**：重试退避机制
+   - `next_retry_at` 字段记录下次重试时间
+   - 调度器过滤未到时间的 RETRYING 任务
+   - 退避策略：5s → 15s → 60s
+
+4. **新增**：原子化 `retry_task()` 方法
+   - 单锁内完成"重置字段 + 转 PENDING + 入队"
+   - 避免中间态落盘和多次通知
+   - `can_transition()` 断言检查确保状态机规则一致性
+
+### 重构
+
+1. **重构**：`update_status()` 添加日志告警
+   - 提醒开发者优先使用 `transition()`
+   - 告警位置在确认任务存在之后，避免噪声
+
+2. **重构**：持久化异常添加日志
+   - `transition()`、`delete_task()`、`load()` 等方法添加 `logger.error()`
+   - 提升可观测性，便于问题排查
+
+3. **重构**：`reset_task_for_retry()` 明确边界
+   - 文档说明适用场景
+   - 推荐常规重试使用 `retry_task()`
+
+### Bug 修复
+
+1. **修复**：transition 落盘并发乱序风险
+   - 将 `save_task()` 移到锁内执行
+   - 避免多线程下状态乱序覆盖
+
+2. **修复**：调度器回退绕过状态机
+   - 添加 `DOWNLOADING → QUEUED` 合法转换路径
+   - 启动失败时优先走 `transition()`
+
+3. **修复**：UI 重试未重置 retry_count
+   - 新增 `reset_task_for_retry()` 方法
+   - 重试时清零 `retry_count` 和运行时字段
+
+4. **修复**：delete_task 未持久化
+   - 调用存储层 `delete_task()` 同步删除磁盘记录
+   - 避免重启后任务"复活"
+
+### 测试更新
+
+- 新增 363 个测试用例
+- 测试覆盖状态机、崩溃恢复、持久化等场景
+- Codex 审查评分：63 → 93/100
+
+---
+
 ## 0.3.0 2026.02.22 任务状态扩展与存储层重构
 
 ### 新增功能

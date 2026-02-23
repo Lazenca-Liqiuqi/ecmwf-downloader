@@ -40,7 +40,7 @@ ECMWF downloader/
 
 ## 当前状态
 
-**版本**：v0.3.0
+**版本**：v0.4.0
 
 **阶段**：第五阶段（下载功能集成）**进行中**
 
@@ -53,6 +53,8 @@ ECMWF downloader/
 - ✅ 配置初始化（config_initializer）
 - ✅ 任务状态扩展（QUEUED 状态）
 - ✅ 存储层抽象（TaskStore 接口）
+- ✅ 状态机机制（VALID_TRANSITIONS）
+- ✅ 崩溃恢复逻辑（reconcile）
 
 ## 工作阶段
 
@@ -70,6 +72,8 @@ ECMWF downloader/
   - [x] 任务持久化与观察者重构
   - [x] 任务状态扩展（QUEUED）
   - [x] 存储层抽象（TaskStore）
+  - [x] 状态机机制（VALID_TRANSITIONS）
+  - [x] 崩溃恢复（reconcile）
   - [ ] 多文件存储集成
   - [ ] 队列调度器
   - [ ] 集成下载Worker与控制按钮

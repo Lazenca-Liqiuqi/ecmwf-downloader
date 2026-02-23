@@ -6,6 +6,7 @@ ECMWF下载器进度管理模块
 """
 
 import copy
+import logging
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +15,8 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 from src.core.exceptions import ProgressLoadError, ProgressSaveError
 from src.core.models import TaskEventType, TaskInfo, TaskStatus
 from src.core.progress_store import MultiFileTaskStore, TaskStore
+
+logger = logging.getLogger(__name__)
 
 # 合法状态转换映射：{当前状态: {允许转换的目标状态集合}}
 # P0-2 修复：扩展失败转换路径，避免 update_status() 绕过校验
@@ -156,9 +159,11 @@ class ProgressManager:
         if reconciled_count > 0:
             try:
                 self.save()
-            except ProgressSaveError:
-                # 保存失败不影响启动，仅记录日志
-                pass
+            except ProgressSaveError as e:
+                # 审查修复 #7：记录保存失败日志
+                logger.error(
+                    f"[ProgressManager] load() reconcile 后保存失败: error={e}"
+                )
 
     def _reconcile_tasks(self) -> int:
         """修复任务状态
@@ -349,9 +354,12 @@ class ProgressManager:
             if should_persist and self._store is not None:
                 try:
                     self._store.save_task(task_id, task_snapshot)
-                except Exception:
-                    # 持久化失败不影响状态转换，仅记录日志
-                    pass
+                except Exception as e:
+                    # 审查修复 #7：记录持久化失败日志，便于问题排查
+                    logger.error(
+                        f"[ProgressManager] transition() 持久化失败: "
+                        f"task_id={task_id}, status={target_status.value}, error={e}"
+                    )
 
         # 锁外通知观察者（避免死锁）
         if task_snapshot is not None:
@@ -407,16 +415,29 @@ class ProgressManager:
     ) -> None:
         """更新任务状态
 
+        审查修复 #5：此方法绕过状态机校验，应优先使用 transition()。
+        保留此方法仅用于降级场景，调用时会记录告警日志。
+        P1-1 修复：将告警挪到确认任务存在之后，避免无效告警噪声。
+
         Args:
             task_id: 任务ID
             status: 新状态
             error_message: 错误信息（可选）
+
+        Warning:
+            此方法不校验状态转换合法性，不持久化。应优先使用 transition()。
         """
         task_snapshot = None
         with self._lock:
             task = self.tasks.get(task_id)
             if task is None:
                 return
+
+            # P1-1 修复：仅在实际执行更新时记录告警，避免对不存在任务产生噪声
+            logger.warning(
+                f"[ProgressManager] update_status() 绕过状态机校验: "
+                f"task_id={task_id}, status={status.value}。建议使用 transition() 方法。"
+            )
 
             task.status = status
 
@@ -526,10 +547,25 @@ class ProgressManager:
         """重置任务的运行时字段，准备重新下载
 
         审查修复 #3：在 UI 重试时清零 retry_count 和其他运行时字段。
+        审查修复 #6：添加观察者通知和持久化，确保 UI 刷新和数据一致性。
+
+        P1-风险2 修复：明确适用边界。
+
+        Warning:
+            此方法仅重置字段，不改变任务状态。推荐使用 retry_task() 进行原子化重试操作。
+            此方法适用于以下特定场景：
+            - 需要单独重置运行时字段但不立即入队的场景
+            - 内部流程中需要分步操作的场景
+
+            对于常规的"重试失败任务"场景，请使用 retry_task() 方法，它会：
+            - 原子化完成"重置字段 + 转 PENDING + 入队"
+            - 避免中间态落盘
+            - 只触发一次观察者通知
 
         Args:
             task_id: 任务ID
         """
+        task_snapshot = None
         with self._lock:
             task = self.tasks.get(task_id)
             if task is not None:
@@ -543,6 +579,103 @@ class ProgressManager:
                 # 清理 metadata 中的重试时间
                 if "next_retry_at" in task.metadata:
                     del task.metadata["next_retry_at"]
+
+                # 审查修复 #6：构造快照用于锁外通知
+                task_snapshot = _deep_copy_task(task)
+
+                # 审查修复 #6：在锁内持久化重置后的状态
+                if self._store is not None:
+                    try:
+                        self._store.save_task(task_id, task_snapshot)
+                    except Exception as e:
+                        # 审查修复 #7：记录持久化失败日志
+                        logger.error(
+                            f"[ProgressManager] reset_task_for_retry() 持久化失败: "
+                            f"task_id={task_id}, error={e}"
+                        )
+
+        # 审查修复 #6：锁外通知观察者，确保 UI 刷新
+        if task_snapshot is not None:
+            self._notify_observers(task_id, task_snapshot, TaskEventType.UPDATED)
+
+    def retry_task(self, task_id: str) -> bool:
+        """原子化重试任务：重置字段 + 转 PENDING + 入队
+
+        P1-2 修复：将"重置字段 + 转 PENDING + 入队"封装为原子操作，
+        避免中间态落盘和多次观察者通知。
+
+        P1-风险1 修复：添加 can_transition() 断言检查，确保状态机规则变更时自动校验。
+
+        仅允许 FAILED/CANCELLED 状态的任务调用此方法。
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            bool: 是否成功启动重试
+
+        Raises:
+            ValueError: 任务状态不是 FAILED/CANCELLED 时抛出，或状态转换不合法时抛出
+        """
+        task_snapshot = None
+        with self._lock:
+            task = self.tasks.get(task_id)
+            if task is None:
+                return False
+
+            current_status = task.status
+
+            # 仅允许 FAILED/CANCELLED 状态重试
+            if current_status not in (TaskStatus.FAILED, TaskStatus.CANCELLED):
+                raise ValueError(
+                    f"只能重试失败或已取消的任务，当前状态: {current_status.value}"
+                )
+
+            # P1-风险1 修复：断言状态转换合法性，确保状态机规则变更时自动校验
+            if not self.can_transition(current_status, TaskStatus.PENDING):
+                raise ValueError(
+                    f"非法状态转换: {current_status.value} → {TaskStatus.PENDING.value}"
+                )
+            if not self.can_transition(TaskStatus.PENDING, TaskStatus.QUEUED):
+                raise ValueError(
+                    f"非法状态转换: {TaskStatus.PENDING.value} → {TaskStatus.QUEUED.value}"
+                )
+
+            # 步骤1：重置运行时字段
+            task.retry_count = 0
+            task.progress = 0.0
+            task.downloaded_size = 0
+            task.account_id = None
+            task.started_at = None
+            task.completed_at = None
+            task.error_message = None
+            if "next_retry_at" in task.metadata:
+                del task.metadata["next_retry_at"]
+
+            # 步骤2：转换状态到 PENDING（清理终态字段）
+            task.status = TaskStatus.PENDING
+
+            # 步骤3：转换状态到 QUEUED
+            task.status = TaskStatus.QUEUED
+
+            # 构造最终快照
+            task_snapshot = _deep_copy_task(task)
+
+            # 一次持久化（最终状态：QUEUED）
+            if self._store is not None:
+                try:
+                    self._store.save_task(task_id, task_snapshot)
+                except Exception as e:
+                    logger.error(
+                        f"[ProgressManager] retry_task() 持久化失败: "
+                        f"task_id={task_id}, error={e}"
+                    )
+
+        # 一次观察者通知
+        if task_snapshot is not None:
+            self._notify_observers(task_id, task_snapshot, TaskEventType.UPDATED)
+
+        return True
 
     def get_task(self, task_id: str) -> Optional[TaskInfo]:
         """获取任务信息（深拷贝副本）
@@ -609,9 +742,12 @@ class ProgressManager:
             if self._store is not None:
                 try:
                     self._store.delete_task(task_id)
-                except Exception:
-                    # 存储层删除失败不影响内存删除
-                    pass
+                except Exception as e:
+                    # 审查修复 #7：记录存储层删除失败日志
+                    logger.error(
+                        f"[ProgressManager] delete_task() 存储层删除失败: "
+                        f"task_id={task_id}, error={e}"
+                    )
 
         # 锁外通知观察者（避免死锁）
         if task_snapshot is not None:

@@ -282,8 +282,7 @@ class TasksScreen(BaseScreen):
         """处理重试操作
 
         P1-3 修复：实现重试逻辑。
-        将 FAILED/CANCELLED 状态的任务转为 PENDING，然后自动入队。
-        审查修复 #3：重试时重置 retry_count 和运行时字段。
+        P1-2 修复：使用原子化的 retry_task() 方法，避免中间态落盘。
         """
         table = self.query_one("#tasks-table", TaskTable)
         task_id = table.get_selected_task_id()
@@ -312,22 +311,21 @@ class TasksScreen(BaseScreen):
             return
 
         try:
-            # 审查修复 #3：重置运行时字段（retry_count、progress 等）
-            self.app.progress_manager.reset_task_for_retry(task_id)
+            # P1-2 修复：使用原子化的 retry_task() 方法
+            # 一次性完成：重置字段 + 转 PENDING + 入队
+            success = self.app.progress_manager.retry_task(task_id)
 
-            # 转为 PENDING 状态
-            self.app.progress_manager.transition(task_id, TaskStatus.PENDING)
+            if success:
+                self.notify(f"任务 {task_id} 已重新入队等待调度", severity="success")
 
-            # 自动入队
-            self.app.progress_manager.enqueue(task_id)
+                # 刷新列表
+                self._load_tasks(
+                    status_filter=self._current_filter,
+                    search_text=self.query_one("#search-input", Input).value,
+                )
+            else:
+                self.notify(f"任务 {task_id} 不存在", severity="error")
 
-            self.notify(f"任务 {task_id} 已重新入队等待调度", severity="success")
-
-            # 刷新列表
-            self._load_tasks(
-                status_filter=self._current_filter,
-                search_text=self.query_one("#search-input", Input).value,
-            )
         except ValueError as e:
             self.notify(f"重试失败: {str(e)}", severity="error")
 

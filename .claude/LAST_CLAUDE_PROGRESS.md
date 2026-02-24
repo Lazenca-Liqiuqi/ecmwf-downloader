@@ -1,71 +1,53 @@
-# 工作进度记录（2026-02-23）
+# 上次对话进度
 
 ## 项目概况
 
-**项目名称**：ECMWF Downloader
-**版本**：v0.4.0
-**阶段**：第五阶段（下载功能集成）进行中
+ECMWF Downloader v0.4.0，第五阶段（下载功能集成）进行中。
 
 ## 工作任务
 
-1. 项目记忆版本一致性检查与修复
-2. 项目记忆格式检查与修复
-3. 记忆组件位置检查
-4. 临时文件与缓存清理
+1. 修复任务管理页面的多选功能
+2. 实现鼠标点击切换选中状态（不使用键盘）
+3. 优化选中状态的视觉显示
 
 ## 工作内容
 
-### 1. 版本记忆检查与修复
+### 问题修复
 
-**Git最新Tag**：v0.4.0
+1. **修复 `progress_path` 参数错误**
+   - `ECMWFDownloaderApp.__init__()` 参数从 `progress_path` 改为 `data_dir`
+   - 同步更新 `create_app()` 和 `__main__.py` 中的调用
 
-| 文件 | 修复内容 |
-|------|----------|
-| CHANGELOG.md | `### 测试更新` 改为有序列表格式 |
-| README.md | 同步第五阶段待完成项与CLAUDE.md一致 |
+2. **修复任务表格多选功能**
+   - 删除不可靠的键盘操作逻辑
+   - 实现 `on_mouse_down` 事件处理，直接响应鼠标点击
+   - 使用 `Coordinate` 对象调用 `update_cell_at` 更新单元格
 
-### 2. CLAUDE.md格式修复
+3. **修复选中标志显示问题**
+   - 原使用 `[x]`/`[ ]`，方括号被 Textual 当作富文本标记导致显示异常
+   - 改为使用 `✓`/`○` 符号，视觉更清晰
 
-| 检查项 | 修复前 | 修复后 |
-|--------|--------|--------|
-| 目录结构 | 多级嵌套 | 单级结构 |
-| 缺失文件 | - | 新增 data/, logs/, ecmwf.bat, pyproject.toml |
+### UI 改进
 
-### 3. 记忆组件位置检查
-
-| 组件 | 位置 | 状态 |
-|------|------|------|
-| README.md | 根目录 | ✅ |
-| CHANGELOG.md | 根目录 | ✅ |
-| CLAUDE.md | .claude/ | ✅ |
-| LAST_CLAUDE_PROGRESS.md | .claude/ | ✅ |
-
-### 4. 临时文件清理
-
-成功删除12项临时文件/目录：
-- `.coverage`, `htmlcov/`, `.pytest_cache/`
-- `manual_verify_*/`（3个）
-- `store_review_tmp_*/`（3个）
-- `store_test_20260222_1/`, `py_created_dir/`
-- `-冲突-李秋奇_Win11.coverage`
+- 侧边栏导航文字从 "T 任务" 改为 "T 任务管理"
+- 任务管理页面标题从 "任务列表" 改为 "任务管理"
+- 操作按钮从 4 个扩展为 5 个：全选、入队、重试、取消、删除
 
 ## 交付物
 
-| 文件 | 变更类型 |
-|------|----------|
-| `.claude/CLAUDE.md` | 修改：目录结构改为单级 |
-| `CHANGELOG.md` | 修改：测试更新格式修正 |
-| `README.md` | 修改：同步第五阶段待完成项 |
-| `.claude/LAST_CLAUDE_PROGRESS.md` | 新建：本次工作记录 |
+- `src/ui/widgets/task_table.py` - 任务表格组件，支持鼠标点击多选
+- `src/ui/widgets/contents/tasks_content.py` - 任务管理页面，移除键盘操作
+- `src/ui/widgets/navigation_sidebar.py` - 侧边栏导航更新
+- `src/ui/app.py` - 应用主类参数修复
+- `src/ui/__main__.py` - 启动入口参数修复
 
 ## 状态变动
 
-- **版本**：v0.4.0（未变更）
-- **阶段**：第五阶段进行中（未变更）
-- **目录清洁度**：提升（清理12项临时文件）
+- 版本：v0.4.0（无变化）
+- 阶段：第五阶段进行中
 
 ## 工具
 
-- **Git**：版本检查、状态查看
-- **Bash**：文件操作、目录清理
-- **Read/Write/Edit**：文件读写编辑
+- Textual TUI 框架 (v7.5.0)
+- DataTable 组件的 `update_cell_at` 方法配合 `Coordinate` 对象
+- 鼠标事件 `on_mouse_down` 处理

@@ -927,14 +927,14 @@ class ECMWFDownloaderApp(App):
 def create_app(
     config_path: Optional[Path] = None,
     accounts_path: Optional[Path] = None,
-    progress_path: Optional[Path] = None,
+    data_dir: Optional[Path] = None,
 ) -> ECMWFDownloaderApp:
     """创建应用实例的便捷函数
 
     Args:
         config_path: 配置文件路径
         accounts_path: 账号配置文件路径
-        progress_path: 进度文件路径
+        data_dir: 数据目录路径
 
     Returns:
         ECMWFDownloaderApp: 应用实例
@@ -942,5 +942,5 @@ def create_app(
     return ECMWFDownloaderApp(
         config_path=config_path,
         accounts_path=accounts_path,
-        progress_path=progress_path,
+        data_dir=data_dir,
     )

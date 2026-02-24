@@ -136,7 +136,7 @@ class NavigationSidebar(Vertical):
     # 导航项配置
     NAV_ITEMS = [
         {"id": "home", "label": "H 首页", "key": "h"},
-        {"id": "tasks", "label": "T 任务", "key": "t"},
+        {"id": "tasks", "label": "T 任务管理", "key": "t"},
         {"id": "download", "label": "D 下载", "key": "d"},
         {"id": "accounts", "label": "A 账号池", "key": "a"},
         {"id": "config", "label": "C 创建任务", "key": "c"},

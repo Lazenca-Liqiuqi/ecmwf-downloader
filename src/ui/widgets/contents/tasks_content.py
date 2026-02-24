@@ -1,16 +1,16 @@
 """
-ECMWF Downloader TUI 任务列表内容组件
+ECMWF Downloader TUI 任务管理内容组件
 
-显示所有下载任务，支持状态筛选和任务操作。
+显示所有下载任务，支持状态筛选、多选操作和批量任务操作。
 这是从TasksScreen迁移而来的Widget版本。
-支持方向键操作：表格用方向键移动，Enter键选中行/触发按钮。
+只支持鼠标点击操作。
 """
 
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING, Iterable, List, Set, Tuple
 
 from textual.containers import Horizontal, Vertical
 from textual.css.query import NoMatches
-from textual.events import Key, Resize
+from textual.events import Resize
 from textual.widget import Widget
 from textual.widgets import Button, Label
 
@@ -18,16 +18,17 @@ from src.core.progress import TaskStatus
 from src.ui.widgets.task_table import TaskTable
 
 if TYPE_CHECKING:
-    from src.core.progress import TaskInfo
+    from src.core.progress import TaskInfo, TaskEventType
 
 
 class TasksContent(Widget):
-    """任务列表内容组件
+    """任务管理内容组件
 
     显示：
     - 所有任务的表格列表
     - 状态筛选按钮（全部/待下载/下载中/已完成/失败）
-    - 操作按钮（重试、取消、删除）
+    - 操作按钮（全选、入队、重试、取消、删除）
+    - 支持多选操作（Ctrl+点击 或 Shift+点击）
     """
 
     DEFAULT_CSS = """
@@ -73,7 +74,7 @@ class TasksContent(Widget):
     }
 
     /* ═══════════════════════════════════════════════════════════════
-       操作按钮区域 - 三等分布局
+       操作按钮区域 - 五等分布局
        ═══════════════════════════════════════════════════════════════ */
     #tasks-container #actions-container {
         width: 1fr;
@@ -87,7 +88,7 @@ class TasksContent(Widget):
     """
 
     def __init__(self, app, **kwargs):
-        """初始化任务列表内容组件
+        """初始化任务管理内容组件
 
         Args:
             app: 应用实例引用
@@ -99,11 +100,11 @@ class TasksContent(Widget):
         self._current_filter = "all"
 
     def compose(self) -> Iterable:
-        """构建任务列表 UI"""
+        """构建任务管理 UI"""
         # 主容器
         with Vertical(id="tasks-container", classes="content-container"):
             # 标题
-            yield Label("任务列表", id="tasks-title")
+            yield Label("任务管理", id="tasks-title")
 
             # 状态筛选区域（五等分）
             with Horizontal(id="filter-container"):
@@ -116,9 +117,10 @@ class TasksContent(Widget):
             # 任务表格
             yield TaskTable(id="tasks-table")
 
-            # 操作按钮区域
+            # 操作按钮区域（五等分）
             with Horizontal(id="actions-container"):
-                yield Button("开始", id="btn-start", variant="default")
+                yield Button("全选", id="btn-select-all", variant="default")
+                yield Button("入队", id="btn-enqueue", variant="default", classes="-middle")
                 yield Button("重试", id="btn-retry", variant="default", classes="-middle")
                 yield Button("取消", id="btn-cancel", variant="default", classes="-middle")
                 yield Button("删除", id="btn-delete", variant="default", classes="-last")
@@ -155,20 +157,14 @@ class TasksContent(Widget):
         self._unregister_progress_observer()
 
     def _setup_table(self) -> None:
-        """设置任务表格列"""
+        """设置任务表格
+
+        注意：列设置由 TaskTable.on_mount() 处理，这里只需要确保表格样式正确。
+        """
         table = self.query_one("#tasks-table", TaskTable)
+        # 列由 TaskTable.on_mount() 添加，不要调用 clear(columns=True)
         table.cursor_type = "row"
         table.zebra_stripes = True
-        table.clear(columns=True)
-        # 显式给出 width，避免 DataTable 进入 auto_width 模式（否则后续动态宽度会被忽略）
-        # TaskTable有5列：任务ID、文件名、状态、进度、创建时间
-        # 注意：TaskTable.update_row 当前使用列名（如“状态”“进度”）作为 column_key。
-        # 这里不要传 key=，避免列 key 与列名不一致导致 update_cell 失败。
-        table.add_column("任务ID", width=20)
-        table.add_column("文件名", width=30)
-        table.add_column("状态", width=8)
-        table.add_column("进度", width=8)
-        table.add_column("创建时间", width=19)
 
     def _load_tasks(self, status_filter: str = "all") -> None:
         """加载任务数据到表格
@@ -208,8 +204,11 @@ class TasksContent(Widget):
             self._handle_filter(button_id.replace("filter-", ""))
 
         # 操作按钮
-        elif button_id == "btn-start":
-            self._handle_start()
+        elif button_id == "btn-select-all":
+            self._handle_select_all()
+
+        elif button_id == "btn-enqueue":
+            self._handle_enqueue()
 
         elif button_id == "btn-retry":
             self._handle_retry()
@@ -228,7 +227,7 @@ class TasksContent(Widget):
             return
 
         columns = list(table.ordered_columns)
-        if len(columns) < 5:
+        if len(columns) < 6:
             return
 
         table_width = table.size.width
@@ -238,19 +237,22 @@ class TasksContent(Widget):
         # 估算可用宽度：减去左右边框与列分隔符（近似值，避免溢出）
         interior_width = max(0, table_width - 2 - (len(columns) - 1))
 
-        # 更偏向“前两列更宽、状态更窄”的分配：
-        # - 状态列尽量窄（6~8）
-        # - 进度列较窄（7~9）
-        # - 创建时间尽量保持可读（17~19）
-        # - 任务ID适中偏宽（20~44）
-        # - 文件名吃掉剩余
+        # 列宽分配（6列：选、任务ID、文件名、状态、进度、创建时间）
+        # - 选：固定4字符
+        # - 状态：尽量窄（6~8）
+        # - 进度：较窄（7~9）
+        # - 创建时间：保持可读（17~19）
+        # - 任务ID：适中偏宽（20~40）
+        # - 文件名：吃掉剩余
+        select_width = 4
         status_width = max(6, min(8, int(interior_width * 0.06)))
         progress_width = max(7, min(9, int(interior_width * 0.07)))
         time_width = max(17, min(19, int(interior_width * 0.16)))
-        task_id_width = max(20, min(44, int(interior_width * 0.30)))
+        task_id_width = max(18, min(40, int(interior_width * 0.25)))
         filename_width = max(
-            22,
+            20,
             interior_width
+            - select_width
             - task_id_width
             - status_width
             - progress_width
@@ -258,23 +260,25 @@ class TasksContent(Widget):
         )
 
         # 如果空间太窄，优先压缩任务ID列给文件名列
-        min_filename = 22
+        min_filename = 20
         if filename_width < min_filename:
             shortage = min_filename - filename_width
-            task_id_width = max(18, task_id_width - shortage)
-            filename_width = max(min_filename, interior_width - task_id_width - status_width - progress_width - time_width)
+            task_id_width = max(16, task_id_width - shortage)
+            filename_width = max(min_filename, interior_width - select_width - task_id_width - status_width - progress_width - time_width)
 
-        # 设置列宽（按添加顺序：任务ID、文件名、状态、进度、创建时间）
+        # 设置列宽（按添加顺序：选、任务ID、文件名、状态、进度、创建时间）
         columns[0].auto_width = False
-        columns[0].width = task_id_width
+        columns[0].width = select_width
         columns[1].auto_width = False
-        columns[1].width = filename_width
+        columns[1].width = task_id_width
         columns[2].auto_width = False
-        columns[2].width = status_width
+        columns[2].width = filename_width
         columns[3].auto_width = False
-        columns[3].width = progress_width
+        columns[3].width = status_width
         columns[4].auto_width = False
-        columns[4].width = time_width
+        columns[4].width = progress_width
+        columns[5].auto_width = False
+        columns[5].width = time_width
 
         table.refresh(layout=True)
 
@@ -303,92 +307,137 @@ class TasksContent(Widget):
         # 重新加载任务
         self._load_tasks(status_filter=filter_type)
 
-    def _handle_start(self) -> None:
-        """处理入队操作
+    def _handle_select_all(self) -> None:
+        """处理全选/取消全选操作"""
+        table = self.query_one("#tasks-table", TaskTable)
+
+        # 检查当前是否已有选择
+        selected_count = len(table.get_selected_task_ids())
+        total_count = table.get_task_count()
+
+        if selected_count > 0 and selected_count == total_count:
+            # 已全选，取消全选
+            table.deselect_all()
+            self.notify("已取消全选", severity="information")
+        else:
+            # 全选
+            table.select_all()
+            self.notify(f"已选中 {total_count} 个任务", severity="information")
+
+    def _get_selected_tasks(self) -> Tuple[Set[str], List["TaskInfo"]]:
+        """获取选中的任务ID和任务信息
+
+        Returns:
+            Tuple[Set[str], List[TaskInfo]]: (任务ID集合, 任务信息列表)
+        """
+        table = self.query_one("#tasks-table", TaskTable)
+        task_ids = table.get_selected_task_ids()
+
+        if not task_ids:
+            return set(), []
+
+        tasks = []
+        for task_id in task_ids:
+            task = self._app_ref.progress_manager.get_task(task_id)
+            if task:
+                tasks.append(task)
+
+        return task_ids, tasks
+
+    def _handle_enqueue(self) -> None:
+        """处理批量入队操作
 
         将任务入队到等待调度状态，由队列调度器负责分配账号和启动下载。
         只允许 PENDING 状态的任务入队。
         """
-        table = self.query_one("#tasks-table", TaskTable)
-        task_id = table.get_selected_task_id()
+        task_ids, tasks = self._get_selected_tasks()
 
-        if task_id is None:
-            self.notify("请先选择一个任务", severity="warning")
+        if not task_ids:
+            self.notify("请先选择任务", severity="warning")
             return
 
-        task = self._app_ref.progress_manager.get_task(task_id)
-        if task is None:
-            self.notify(f"任务 {task_id} 不存在", severity="error")
+        # 筛选出可以入队的任务（仅 PENDING 状态）
+        pending_tasks = [t for t in tasks if t.status == TaskStatus.PENDING]
+
+        if not pending_tasks:
+            self.notify("没有可以入队的任务（仅支持待下载状态）", severity="warning")
             return
 
-        # 只允许 PENDING 状态入队
-        if task.status != TaskStatus.PENDING:
-            status_names = {
-                TaskStatus.QUEUED: "已入队",
-                TaskStatus.DOWNLOADING: "下载中",
-                TaskStatus.COMPLETED: "已完成",
-                TaskStatus.FAILED: "已失败",
-                TaskStatus.CANCELLED: "已取消",
-                TaskStatus.RETRYING: "重试中",
-            }
-            status_name = status_names.get(task.status, task.status.value)
-            self.notify(f"只能入队待下载状态的任务，当前状态: {status_name}", severity="warning")
-            return
+        # 执行批量入队
+        success_count = 0
+        fail_count = 0
 
-        try:
-            self._app_ref.progress_manager.enqueue(task_id)
-            self.notify(f"任务 {task_id} 已入队等待调度", severity="information")
-        except ValueError as e:
-            self.notify(f"入队失败: {str(e)}", severity="error")
+        for task in pending_tasks:
+            try:
+                self._app_ref.progress_manager.enqueue(task.task_id)
+                success_count += 1
+            except ValueError as e:
+                self.log.warning(f"[TasksContent] 入队失败: {task.task_id} - {e}")
+                fail_count += 1
+
+        # 显示结果
+        if fail_count == 0:
+            self.notify(f"已入队 {success_count} 个任务", severity="success")
+        else:
+            self.notify(f"入队完成：成功 {success_count} 个，失败 {fail_count} 个", severity="warning")
 
     def _handle_retry(self) -> None:
-        """处理重试操作"""
-        table = self.query_one("#tasks-table", TaskTable)
-        task_id = table.get_selected_task_id()
+        """处理批量重试操作"""
+        task_ids, tasks = self._get_selected_tasks()
 
-        if task_id is None:
-            self.notify("请先选择一个任务", severity="warning")
+        if not task_ids:
+            self.notify("请先选择任务", severity="warning")
             return
 
-        # 检查任务状态
-        tasks = self._app_ref.progress_manager.get_all_tasks()
-        task = next((t for t in tasks if t.task_id == task_id), None)
+        # 筛选出可以重试的任务（失败或已取消状态）
+        retryable_tasks = [t for t in tasks if t.status in [TaskStatus.FAILED, TaskStatus.CANCELLED]]
 
-        if task and task.status in [TaskStatus.FAILED, TaskStatus.CANCELLED]:
-            # TODO: 实现重试逻辑（需要下载Worker）
-            self.notify(f"重试任务 {task_id} 功能待实现", severity="information")
-        else:
-            self.notify("只能重试失败或已取消的任务", severity="warning")
+        if not retryable_tasks:
+            self.notify("没有可以重试的任务（仅支持失败或已取消状态）", severity="warning")
+            return
+
+        # TODO: 实现批量重试逻辑
+        self.notify(f"批量重试 {len(retryable_tasks)} 个任务 - 功能待实现", severity="information")
 
     def _handle_cancel(self) -> None:
-        """处理取消操作"""
-        table = self.query_one("#tasks-table", TaskTable)
-        task_id = table.get_selected_task_id()
+        """处理批量取消操作"""
+        task_ids, tasks = self._get_selected_tasks()
 
-        if task_id is None:
-            self.notify("请先选择一个任务", severity="warning")
+        if not task_ids:
+            self.notify("请先选择任务", severity="warning")
             return
 
-        # TODO: 实现取消逻辑
-        self.notify(f"取消任务 {task_id} 功能待实现", severity="information")
+        # TODO: 实现批量取消逻辑
+        self.notify(f"批量取消 {len(task_ids)} 个任务 - 功能待实现", severity="information")
 
     def _handle_delete(self) -> None:
-        """处理删除操作"""
-        table = self.query_one("#tasks-table", TaskTable)
-        task_id = table.get_selected_task_id()
+        """处理批量删除操作"""
+        task_ids, tasks = self._get_selected_tasks()
 
-        if task_id is None:
-            self.notify("请先选择一个任务", severity="warning")
+        if not task_ids:
+            self.notify("请先选择任务", severity="warning")
             return
 
-        # 删除任务
-        success = self._app_ref.progress_manager.delete_task(task_id)
-        if success:
-            self.notify(f"任务 {task_id} 已删除", severity="success")
-            # 重新加载任务列表
-            self._load_tasks(status_filter=self._current_filter)
+        # 执行批量删除
+        success_count = 0
+        fail_count = 0
+
+        for task_id in task_ids:
+            success = self._app_ref.progress_manager.delete_task(task_id)
+            if success:
+                success_count += 1
+            else:
+                fail_count += 1
+
+        # 显示结果
+        if fail_count == 0:
+            self.notify(f"已删除 {success_count} 个任务", severity="success")
         else:
-            self.notify(f"删除任务 {task_id} 失败", severity="error")
+            self.notify(f"删除完成：成功 {success_count} 个，失败 {fail_count} 个", severity="warning")
+
+        # 重新加载任务列表（如果删除了任务）
+        if success_count > 0:
+            self._load_tasks(status_filter=self._current_filter)
 
     def refresh_data(self) -> None:
         """刷新任务列表数据"""
@@ -452,28 +501,3 @@ class TasksContent(Widget):
         else:
             # CREATED 或 UPDATED：使用增量更新方法
             table.update_row(task_info)
-
-    def on_key(self, event: Key) -> None:
-        """处理键盘事件
-
-        Enter键：如果焦点在按钮上，触发按钮操作；如果在表格上，选中行
-        方向键：由各个控件自行处理（表格、输入框、按钮等）
-        Tab键：返回侧边栏（由ContentArea处理）
-
-        Args:
-            event: 键盘事件
-        """
-        # Enter键处理
-        if event.key == "enter":
-            # 检查焦点所在控件
-            focused = self.app.focused
-            if focused and isinstance(focused, Button):
-                # 焦点在按钮上，触发按钮
-                focused.action_press()
-                event.stop()
-            elif focused:
-                # 焦点在其他控件上（如表格、输入框），由控件自行处理
-                pass
-
-        # Tab键交给ContentArea处理（返回侧边栏）
-        # 方向键由各个控件自行处理

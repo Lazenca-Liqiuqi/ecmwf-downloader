@@ -14,13 +14,13 @@ def main():
     # 配置文件路径
     config_path = Path("config/default_config.yaml")
     accounts_path = Path("config/accounts.yaml")
-    progress_path = Path("data/download_progress.json")
+    data_dir = Path("data")
 
     # 创建并运行应用
     app = create_app(
         config_path=config_path,
         accounts_path=accounts_path,
-        progress_path=progress_path,
+        data_dir=data_dir,
     )
 
     app.run()

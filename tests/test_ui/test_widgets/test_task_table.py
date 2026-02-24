@@ -62,10 +62,10 @@ class TestTaskTableMount:
 
     async def test_on_mount_initializes_columns(self, task_table):
         """测试挂载时正确初始化列"""
-        # 验证列的数量（列数应该是5个）
+        # 验证列的数量（列数应该是6个：选中标志 + 任务字段）
         # DataTable.columns返回列键的迭代器
         column_count = len(list(task_table.columns))
-        assert column_count == 5
+        assert column_count == 6
 
     async def test_on_mount_sets_cursor_type(self, task_table):
         """测试挂载时设置光标类型为行"""
@@ -254,3 +254,33 @@ class TestTaskTableFormatHelpers:
 
         result = task_table._format_datetime(None)
         assert result == ""
+
+
+class TestTaskTableClickSelection:
+    """测试单击触发行选择行为（TaskTable自定义）"""
+
+    async def test_mouse_down_toggles_selection(self, task_table, sample_tasks):
+        """测试鼠标按下即可切换选中状态（不依赖Click/RowSelected）"""
+        task_table.load_tasks(sample_tasks)
+
+        # 单元测试环境中 update_cell/refresh_row 可能受限，这里只验证核心逻辑
+        task_table._update_selection_flag = Mock()
+
+        class _DummyStyle:
+            meta = {"row": 1, "column": 0}
+
+        class _DummyMouseDownEvent:
+            style = _DummyStyle()
+            x = 0
+            y = 0
+            button = 1
+            ctrl = False
+            shift = False
+            meta = {}
+
+            def stop(self):
+                pass
+
+        task_table.on_mouse_down(_DummyMouseDownEvent())
+        assert "task-002" in task_table.get_selected_task_ids()
+        task_table._update_selection_flag.assert_called()

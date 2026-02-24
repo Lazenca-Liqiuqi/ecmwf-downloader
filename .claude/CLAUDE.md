@@ -40,7 +40,7 @@ ECMWF downloader/
 
 ## 当前状态
 
-**版本**：v0.4.0
+**版本**：v0.4.1
 
 **阶段**：第五阶段（下载功能集成）**进行中**
 
@@ -55,6 +55,7 @@ ECMWF downloader/
 - ✅ 存储层抽象（TaskStore 接口）
 - ✅ 状态机机制（VALID_TRANSITIONS）
 - ✅ 崩溃恢复逻辑（reconcile）
+- ✅ 队列调度器（DownloadQueueScheduler）
 
 ## 工作阶段
 

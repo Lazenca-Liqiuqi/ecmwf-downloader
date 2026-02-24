@@ -81,7 +81,7 @@ YAML    BaseAPIClient  CDSClient  ProgressManager
 
 ## 当前状态
 
-**版本**：v0.4.0
+**版本**：v0.4.1
 
 **阶段**：第五阶段（下载功能集成）**进行中**
 
@@ -99,6 +99,7 @@ YAML    BaseAPIClient  CDSClient  ProgressManager
 - ✅ 存储层抽象（TaskStore 接口）
 - ✅ 状态机机制（合法转换校验）
 - ✅ 崩溃恢复（启动时自动修复状态）
+- ✅ 队列调度器（并发限流、账号分配）
 
 ## 工作阶段
 
